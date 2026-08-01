@@ -50,7 +50,7 @@ if ELEVENLABS_API_KEY and not ELEVENLABS_API_KEY.startswith("TA_CLE"):
     except Exception as e:
         print(f"Erreur initialisation ElevenLabs : {e}")
 
-VOICE_ID = "21m00Tcm4TlvDq8ikWAM" # Voix par défaut
+VOICE_ID = "YqzYZzQLsKp6BgMf3vbZ" # Voix par défaut
 
 # Mémoire absolue (ChromaDB)
 memoire_collection = None
