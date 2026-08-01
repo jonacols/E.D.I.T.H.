@@ -109,12 +109,13 @@ def system_prompt_du_jour():
 # ================= 4. THÈME =================
 st.set_page_config(page_title="E.D.I.T.H.", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
 
+# J'ai retiré #MainMenu de la balise visibility: hidden pour te permettre de changer le thème
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 html, body, [class*="css"] { font-family: 'Inter', system-ui, sans-serif; }
 .stApp { background-color: #0a0b0e; color: #e9ebf2; }
-#MainMenu, footer, header { visibility: hidden; }
+footer { visibility: hidden; }
 [data-testid="stSidebar"] { background-color: #0d0f13; border-right: 1px solid #1b1f29; }
 .block-container { max-width: 860px; padding-top: 1.2rem; }
 .brand-title { font-size: 1.85rem; font-weight: 800; letter-spacing: 3px; color: #fff; }
@@ -174,7 +175,7 @@ if not st.session_state.authentifie:
             st.rerun()
         else:
             st.error("Accès refusé.")
-    st.stop()  # Empêche le reste du code de s'exécuter si pas authentifié
+    st.stop()
 
 # ================= 5. ÉTAT & PERSISTANCE =================
 def charger_historique():
