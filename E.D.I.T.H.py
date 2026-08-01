@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-E.D.I.T.H. — Hub IA personnel (Streamlit + OpenRouter + ChromaDB + ElevenLabs)
+E.D.I.T.H. — Hub IA personnel
 =============================================================================
-Version corrigée : RAG (Mémoire) réactivé + Typo ElevenLabs corrigée.
+RAG Manuel réactivé + Micro Whisper (OpenAI) + Debug corrigé + Messages sauvés.
 """
 
 import os
@@ -11,6 +11,7 @@ import json
 import html
 import uuid
 import base64
+import traceback
 from datetime import datetime
 
 import streamlit as st
@@ -30,9 +31,18 @@ DOSSIER_MEMOIRE   = os.path.join(DOSSIER_COURANT, "memoire_vectorielle")
 
 MAX_CONTEXT_MESSAGES = 10
 
+# Client OpenRouter (Pour le texte - Llama, Gemini, Kimi, etc.)
 client = OpenAI(api_key=API_KEY, base_url="https://openrouter.ai/api/v1")
 
-# Initialisation d'ElevenLabs pour la voix
+# Client OpenAI (Pour le Speech-to-Text Whisper)
+openai_client = None
+if OPENAI_API_KEY and not OPENAI_API_KEY.startswith("TA_CLE"):
+    try:
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    except Exception as e:
+        print(f"Erreur initialisation OpenAI : {e}")
+
+# Client ElevenLabs (Pour la voix)
 eleven_client = None
 if ELEVENLABS_API_KEY and not ELEVENLABS_API_KEY.startswith("TA_CLE"):
     try:
@@ -40,8 +50,7 @@ if ELEVENLABS_API_KEY and not ELEVENLABS_API_KEY.startswith("TA_CLE"):
     except Exception as e:
         print(f"Erreur initialisation ElevenLabs : {e}")
 
-# ID de la voix par défaut (Voix humaine ultra-réaliste)
-VOICE_ID = "21m00Tcm4TlvDq8ikWAM" # Rachel par défaut, modifiable selon tes préférences
+VOICE_ID = "21m00Tcm4TlvDq8ikWAM" # Voix par défaut
 
 # Mémoire absolue (ChromaDB)
 memoire_collection = None
@@ -102,7 +111,7 @@ Tu es l'assistante personnelle d'Arthur. Tu l'appelles « Monsieur » (ou occasi
 Tu disposes d'un système de mémoire externe. Si Arthur te donne une NOUVELLE information importante à retenir pour le futur (un nouveau projet, une préférence, un fait de sa vie, une commande technique, un événement santé ou personnel), tu as le POUVOIR de l'enregistrer de façon permanente.
 POUR SAUVEGARDER UN SOUVENIR, ajoute exactement cette balise à la toute fin de ta réponse : [SAVE: l'information à mémoriser].
 Le système date automatiquement chaque souvenir — inutile d'écrire la date toi-même.
-Tes souvenirs te sont restitués avec leur date au format [JJ/MM/AAAA] : tu peux donc suivre l'évolution d'un sujet et construire des chronologies. Si une information change (« c'est guéri », « le projet est terminé »), enregistre un NOUVEAU souvenir plutôt que de corriger l'ancien : l'historique complet te sert à retracer la chronologie."""
+Tes souvenirs te sont restitués avec leur date au format [JJ/MM/AAAA] : tu peux donc suivre l'évolution d'un sujet et construire des chronologies. Si une information change (« c'est guéri », « le projet est terminé »), enregistre un NOUVEAU souvenir plutôt que de corriger l'ancien."""
 
 def system_prompt_du_jour():
     return SYSTEM_PROMPT + (
@@ -149,7 +158,6 @@ footer { visibility: hidden; }
 [data-testid="stSidebar"] [data-testid="stPopover"] > button:hover { color: #ffffff !important; background: #1c2230 !important; }
 [data-testid="stChatInput"] { background: #11141b; border: 1px solid #232a3c; border-radius: 16px; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
 [data-testid="stChatInput"]:focus-within { border-color: #4c8dff; box-shadow: 0 0 0 1px #4c8dff44, 0 4px 18px rgba(0,0,0,.35); }
-[data-testid="stFileUploader"] { background: #11141b; border-radius: 12px; padding: 6px; margin-bottom: 8px; }
 hr { border-color: #181c26; }
 ::selection { background: #2d5fd055; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -196,7 +204,6 @@ if not st.session_state.chats:
     st.session_state.chats = {nid: {"title": "Nouvelle discussion", "messages": []}}
 if "current_chat_id" not in st.session_state or st.session_state.current_chat_id not in st.session_state.chats:
     st.session_state.current_chat_id = next(reversed(st.session_state.chats))
-st.session_state.setdefault("show_debug", False)
 st.session_state.setdefault("mode_vocal_continu", False) 
 
 def create_new_chat():
@@ -233,7 +240,7 @@ def generer_audio_elevenlabs(texte_a_lire):
     try:
         audio_stream = eleven_client.text_to_speech.convert(
             voice_id=VOICE_ID,
-            output_format="mp3_44100_128", # CORRIGÉ ICI : 44100 au lieu de 44105 !
+            output_format="mp3_44100_128", 
             text=texte_a_lire,
             model_id="eleven_multilingual_v2",
         )
@@ -263,7 +270,7 @@ def bulle_user(texte): st.markdown(f'<div class="msg-row user"><div class="msg-b
 def tete_edith(): st.markdown('<div class="msg-row edith"><div class="edith-avatar">⚡</div><div class="edith-nom">E.D.I.T.H.</div></div>', unsafe_allow_html=True)
 def ligne_statut(meta):
     ligne = f"`{meta.get('model')}` · {meta.get('reason')}"
-    if st.session_state.show_debug: ligne += f" · in:{meta.get('tokens_in','?')} / out:{meta.get('tokens_out','?')} tok"
+    if st.session_state.get("show_debug", False): ligne += f" · in:{meta.get('tokens_in','?')} / out:{meta.get('tokens_out','?')} tok"
     st.markdown(f'<div class="statut">{ligne}</div>', unsafe_allow_html=True)
 
 # ================= 9. MÉMOIRE : SAUVEGARDE, RAPPEL ET GESTION =================
@@ -288,7 +295,7 @@ def supprimer_memoires_discussion(chat_id):
         try: memoire_collection.delete(where={"chat_id": chat_id})
         except Exception: pass
 
-# ================= 10. SIDEBAR =================
+# ================= 10. SIDEBAR (AVEC MÉMOIRE MANUELLE RETROUVÉE) =================
 with st.sidebar:
     st.markdown('<div class="brand-title">E.D.I.T.H.</div>', unsafe_allow_html=True)
     st.markdown('<div class="brand-sub">EVEN DEAD I\'M THE HERO</div>', unsafe_allow_html=True)
@@ -329,7 +336,33 @@ with st.sidebar:
                         else: st.session_state.current_chat_id = next(reversed(st.session_state.chats))
                         st.rerun()
 
-    st.session_state.show_debug = st.toggle("Debug sous le capot", value=st.session_state.show_debug)
+    st.markdown("---")
+    
+    # === LE RETOUR DE LA GESTION MANUELLE DE LA MÉMOIRE ===
+    if memoire_collection is not None:
+        nb = memoire_collection.count()
+        st.markdown(f'<div class="mem-count">🧠 {nb} souvenir{"s" if nb > 1 else ""} dans la mémoire absolue</div>', unsafe_allow_html=True)
+        with st.expander("🛠️ Gérer la mémoire manuellement"):
+            with st.form("form_ajout_memoire", clear_on_submit=True):
+                nouvelle_info = st.text_input("Ajouter un souvenir manuellement :", placeholder="ex: Arthur aime coder tard la nuit")
+                if st.form_submit_button("➕ Ajouter", use_container_width=True):
+                    if nouvelle_info.strip():
+                        fr = sauvegarder_souvenir(nouvelle_info.strip(), chat_id=st.session_state.current_chat_id)
+                        st.toast(f"Souvenir ajouté le {fr} !", icon="🧠"); st.rerun()
+            st.markdown("**Liste des souvenirs :**")
+            tous_souvenirs = memoire_collection.get()
+            if tous_souvenirs and tous_souvenirs.get("ids"):
+                for s_id, s_doc in zip(tous_souvenirs["ids"], tous_souvenirs["documents"]):
+                    c_text, c_del = st.columns([0.82, 0.18])
+                    with c_text: st.caption(s_doc)
+                    with c_del:
+                        if st.button("🗑️", key=f"del_mem_{s_id}"):
+                            memoire_collection.delete(ids=[s_id]); st.toast("Souvenir supprimé !", icon="🗑️"); st.rerun()
+            else: st.caption("Aucun souvenir dans la mémoire.")
+
+    # === CORRECTION DU BOUTON DEBUG ===
+    st.toggle("Debug sous le capot", key="show_debug")
+    if API_KEY.startswith("TA_CLE"): st.warning("Clé OpenRouter manquante.")
 
 # ================= 11. ZONE PRINCIPALE =================
 chat = st.session_state.chats[st.session_state.current_chat_id]
@@ -345,7 +378,7 @@ if not messages:
     <div class="hero">
       <div class="hero-orb">⚡</div>
       <h1>Que puis-je faire pour vous, Boss ?</h1>
-      <p>Routeur intelligent · mémoire absolue datée · synthèse vocale</p>
+      <p>Routeur intelligent · mémoire absolue datée · micro et synthèse vocale</p>
     </div>""", unsafe_allow_html=True)
     suggestions = ["Planifie les étapes de ma voiture RC", "Retiens que j'ai des problèmes de sommeil", "À combien de degrés je cuis une lasagne ?", "Debugge mon code avec moi"]
     cols = st.columns(2)
@@ -362,7 +395,6 @@ for idx, m in enumerate(messages):
         st.markdown(m["content"])
         if "metadata" in m: ligne_statut(m["metadata"])
         
-        # Icône de lecture audio (haut-parleur 🔊) sous chaque message d'E.D.I.T.H.
         col_audio, _ = st.columns([0.15, 0.85])
         with col_audio:
             with st.popover("🔊 Écouter"):
@@ -372,13 +404,39 @@ for idx, m in enumerate(messages):
                     if audio_bytes:
                         st.audio(audio_bytes, format="audio/mp3", autoplay=True)
                     else:
-                        st.error("Impossible de générer l'audio (Vérifiez la clé ElevenLabs).")
+                        st.error("Impossible de générer l'audio.")
 
-# ================= 12. ENVOI =================
-uploaded_image = st.file_uploader("🖼️ Joindre une image à ce message", type=["png", "jpg", "jpeg", "webp"], key=f"uploader_{st.session_state.current_chat_id}", label_visibility="collapsed")
+# ================= 12. ENVOI MULTIMÉDIA (IMAGE, AUDIO, TEXTE) =================
+# Zone des widgets (Image et Micro) juste au dessus de la barre de texte
+col_up1, col_up2 = st.columns([1, 1])
+with col_up1:
+    uploaded_image = st.file_uploader("🖼️ Joindre une image", type=["png", "jpg", "jpeg", "webp"], key=f"uploader_{st.session_state.current_chat_id}")
+with col_up2:
+    # NOUVEAU : Widget natif de Streamlit pour enregistrer au micro
+    audio_val = st.audio_input("🎤 Parler à E.D.I.T.H.")
+
 prompt = st.chat_input("Demandez quoi que ce soit à E.D.I.T.H.…")
 if "pending" in st.session_state: prompt = st.session_state.pop("pending")
 
+# === TRAITEMENT DU MICRO ===
+if audio_val is not None:
+    # Pour éviter que Streamlit ne renvoie l'audio en boucle à chaque rechargement
+    if st.session_state.get("last_audio_id") != audio_val.id:
+        st.session_state.last_audio_id = audio_val.id
+        if openai_client:
+            with st.spinner("Transcription en cours (Whisper)..."):
+                try:
+                    transcript = openai_client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=("audio.wav", audio_val)
+                    )
+                    prompt = transcript.text
+                except Exception as e:
+                    st.error(f"Erreur de transcription : {e}")
+        else:
+            st.error("Clé OpenAI manquante pour utiliser le micro.")
+
+# === TRAITEMENT DU MESSAGE ===
 if prompt:
     user_msg = {"role": "user", "content": prompt}
     image_b64 = None
@@ -388,7 +446,11 @@ if prompt:
 
     bulle_user(prompt)
     if uploaded_image: st.image(uploaded_image, width=280)
+    
     messages.append(user_msg)
+    # SAUVEGARDE IMMÉDIATE DU MESSAGE : Évite la disparition en cas de crash de l'API
+    sauvegarder_historique()
+    
     if chat["title"] == "Nouvelle discussion": chat["title"] = (prompt[:36] + "…") if len(prompt) > 36 else prompt
 
     tete_edith()
@@ -396,7 +458,6 @@ if prompt:
     with st.spinner("Analyse de la demande…"):
         selected_model, route_reason = (selected_manual_model, "Sélection manuelle") if mode_choisi == "🎛️ Manuel" else get_smart_route(prompt, image_b64 is not None)
 
-    # CORRIGÉ ICI : ON INJECTE DE NOUVEAU LA MÉMOIRE (recuperer_souvenirs) DANS LE SYSTEM PROMPT !
     api_messages = [{"role": "system", "content": system_prompt_du_jour() + recuperer_souvenirs(prompt)}]
     for m in messages[-MAX_CONTEXT_MESSAGES:]:
         if m is user_msg and image_b64:
@@ -422,7 +483,6 @@ if prompt:
 
         box.markdown(texte_propre)
 
-        # Si le mode vocal continu est activé dans la sidebar, on génère l'audio automatiquement
         if st.session_state.mode_vocal_continu:
             audio_bytes = generer_audio_elevenlabs(texte_propre)
             if audio_bytes:
@@ -436,4 +496,8 @@ if prompt:
         st.rerun()
 
     except Exception as e:
-        box.error(f"Erreur d'exécution : {e}")
+        # MEILLEURE GESTION DES ERREURS POUR LE DEBUG
+        err_msg = traceback.format_exc()
+        box.error(f"Erreur d'exécution de l'IA : {e}")
+        if st.session_state.get("show_debug", False):
+            st.code(err_msg, language="python")
