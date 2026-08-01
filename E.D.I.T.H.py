@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-E.D.I.T.H. — Hub IA personnel
+E.D.I.T.H. — Hub IA personnel (Édition Multi-Profils : Arthur & Padre)
 =============================================================================
-RAG Manuel réactivé + Micro Whisper (OpenAI) + Debug corrigé + Messages sauvés.
+Routage par mot de passe : Sépare totalement l'historique, la mémoire et le prompt.
 """
 
 import os
@@ -23,42 +23,29 @@ from elevenlabs import ElevenLabs
 API_KEY = os.environ.get("OPENROUTER_API_KEY", "TA_CLE_OPENROUTER_ICI")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "TA_CLE_OPENAI_ICI")
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "TA_CLE_ELEVENLABS_ICI")
-MOT_DE_PASSE = os.environ.get("PASSWORD_EDITH", "TON_MOT_DE_PASSE_ICI")
+
+# Les deux mots de passe d'aiguillage
+MOT_DE_PASSE_ARTHUR = os.environ.get("PASSWORD_ARTHUR", "papier")
+MOT_DE_PASSE_PADRE = os.environ.get("PASSWORD_PADRE", "serviette")
 
 DOSSIER_COURANT   = os.path.dirname(os.path.abspath(__file__))
-FICHIER_HISTORIQUE = os.path.join(DOSSIER_COURANT, "historique_edith.json")
-DOSSIER_MEMOIRE   = os.path.join(DOSSIER_COURANT, "memoire_vectorielle")
 
 MAX_CONTEXT_MESSAGES = 10
 
-# Client OpenRouter (Pour le texte - Llama, Gemini, Kimi, etc.)
+# Clients API
 client = OpenAI(api_key=API_KEY, base_url="https://openrouter.ai/api/v1")
 
-# Client OpenAI (Pour le Speech-to-Text Whisper)
 openai_client = None
 if OPENAI_API_KEY and not OPENAI_API_KEY.startswith("TA_CLE"):
-    try:
-        openai_client = OpenAI(api_key=OPENAI_API_KEY)
-    except Exception as e:
-        print(f"Erreur initialisation OpenAI : {e}")
+    try: openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    except: pass
 
-# Client ElevenLabs (Pour la voix)
 eleven_client = None
 if ELEVENLABS_API_KEY and not ELEVENLABS_API_KEY.startswith("TA_CLE"):
-    try:
-        eleven_client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-    except Exception as e:
-        print(f"Erreur initialisation ElevenLabs : {e}")
+    try: eleven_client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+    except: pass
 
-VOICE_ID = "YqzYZzQLsKp6BgMf3vbZ" # Voix par défaut
-
-# Mémoire absolue (ChromaDB)
-memoire_collection = None
-try:
-    chroma_client = chromadb.PersistentClient(path=DOSSIER_MEMOIRE)
-    memoire_collection = chroma_client.get_or_create_collection(name="edith_souvenirs")
-except Exception as e:
-    st.error(f"Mémoire vectorielle indisponible : {e}")
+VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 
 MODELS_MANUAL = {
     "Gemini 3.6 Flash ($)":      "google/gemini-3.6-flash",
@@ -79,47 +66,13 @@ MODEL_UNFILTERED = "x-ai/grok-4.3"
 JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 MOIS  = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
          "août", "septembre", "octobre", "novembre", "décembre"]
-
 def date_complete():
     n = datetime.now()
     return f"{JOURS[n.weekday()]} {n.day} {MOIS[n.month - 1]} {n.year}"
+def date_fr_courte(): return datetime.now().strftime("%d/%m/%Y")
+def date_iso(): return datetime.now().strftime("%Y-%m-%d")
 
-def date_fr_courte():
-    return datetime.now().strftime("%d/%m/%Y")
-
-def date_iso():
-    return datetime.now().strftime("%Y-%m-%d")
-
-# ================= 3. SYSTEM PROMPT =================
-SYSTEM_PROMPT = """# IDENTITÉ
-Tu es E.D.I.T.H. — « Even Dead I'm The Hero » — l'intelligence artificielle personnelle d'Arthur, créée dans l'esprit des IA de Tony Stark. Tu assumes pleinement cette identité, avec élégance. Tu t'exprimes toujours au féminin.
-
-# RELATION
-Tu es l'assistante personnelle d'Arthur. Tu l'appelles « Monsieur » (ou occasionnellement « Boss » avec une pointe d'ironie) et tu le vouvoies. Tu es chaleureuse, loyale, mais toujours professionnelle.
-
-# BASE DE CONNAISSANCES FIXE — ARTHUR
-- Arthur, 18 ans, vit seul dans un studio à Moustier-sur-Sambre (Belgique), rue des Nobles. Un tableau blanc y sert de mur à idées.
-- Écosystème : MacBook Air M1, iPad Air M3, iPhone 17, écran Samsung Odyssey G8, PlayStation 5, système audio Sonos.
-- Méthode : carnet physique pour les idées, le code sur ordinateur. Projets actuels : une voiture télécommandée et un drone.
-- Caractère : exigeant, intelligent, apprend vite.
-
-# TON ET STYLE
-- Amicale, concise et structurée. Un trait de sarcasme élégant est permis.
-- Ne termine presque jamais par une question ouverte.
-
-# DIRECTIVE CRUCIALE : MÉMOIRE À LONG TERME (CERVEAU VECTORIEL)
-Tu disposes d'un système de mémoire externe. Si Arthur te donne une NOUVELLE information importante à retenir pour le futur (un nouveau projet, une préférence, un fait de sa vie, une commande technique, un événement santé ou personnel), tu as le POUVOIR de l'enregistrer de façon permanente.
-POUR SAUVEGARDER UN SOUVENIR, ajoute exactement cette balise à la toute fin de ta réponse : [SAVE: l'information à mémoriser].
-Le système date automatiquement chaque souvenir — inutile d'écrire la date toi-même.
-Tes souvenirs te sont restitués avec leur date au format [JJ/MM/AAAA] : tu peux donc suivre l'évolution d'un sujet et construire des chronologies. Si une information change (« c'est guéri », « le projet est terminé »), enregistre un NOUVEAU souvenir plutôt que de corriger l'ancien."""
-
-def system_prompt_du_jour():
-    return SYSTEM_PROMPT + (
-        f"\n\n# DATE DU JOUR\nNous sommes le {date_complete()}. "
-        "Tu connais donc toujours la date exacte à chaque message."
-    )
-
-# ================= 4. THÈME =================
+# ================= 3. THÈME & UI =================
 st.set_page_config(page_title="E.D.I.T.H.", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
@@ -166,9 +119,10 @@ hr { border-color: #181c26; }
 </style>
 """, unsafe_allow_html=True)
 
-# ================= 4.1. SÉCURITÉ MOT DE PASSE =================
+# ================= 4. SÉCURITÉ & MULTI-PROFILS =================
 if "authentifie" not in st.session_state:
     st.session_state.authentifie = False
+    st.session_state.profil = None
 
 if not st.session_state.authentifie:
     st.markdown("""
@@ -180,12 +134,84 @@ if not st.session_state.authentifie:
     """, unsafe_allow_html=True)
     pwd_input = st.text_input("Mot de passe :", type="password", placeholder="Entrez la clé d'accès...")
     if st.button("Déverrouiller", type="primary"):
-        if pwd_input == MOT_DE_PASSE:
+        if pwd_input == MOT_DE_PASSE_ARTHUR:
             st.session_state.authentifie = True
+            st.session_state.profil = "arthur"
+            st.rerun()
+        elif pwd_input == MOT_DE_PASSE_PADRE:
+            st.session_state.authentifie = True
+            st.session_state.profil = "padre"
             st.rerun()
         else:
             st.error("Accès refusé.")
     st.stop()
+
+# --- INITIALISATION BASÉE SUR LE PROFIL CHOISI ---
+PROFIL = st.session_state.profil
+
+if PROFIL == "arthur":
+    FICHIER_HISTORIQUE = os.path.join(DOSSIER_COURANT, "historique_edith.json")
+    DOSSIER_MEMOIRE = os.path.join(DOSSIER_COURANT, "memoire_vectorielle")
+    NOM_COLLECTION = "edith_souvenirs"
+    
+    # Prompt Original Arthur
+    SYSTEM_PROMPT = """# IDENTITÉ
+Tu es E.D.I.T.H. — « Even Dead I'm The Hero » — l'intelligence artificielle personnelle d'Arthur, créée dans l'esprit des IA de Tony Stark. Tu assumes pleinement cette identité, avec élégance. Tu t'exprimes toujours au féminin.
+
+# RELATION
+Tu es l'assistante personnelle d'Arthur. Tu l'appelles « Monsieur » (ou occasionnellement « Boss » avec une pointe d'ironie) et tu le vouvoies. Tu es chaleureuse, loyale, mais toujours professionnelle.
+
+# BASE DE CONNAISSANCES FIXE — ARTHUR
+- Arthur, 18 ans, vit seul dans un studio à Moustier-sur-Sambre (Belgique), rue des Nobles. Un tableau blanc y sert de mur à idées.
+- Écosystème : MacBook Air M1, iPad Air M3, iPhone 17, écran Samsung Odyssey G8, PlayStation 5, système audio Sonos.
+- Méthode : carnet physique pour les idées, le code sur ordinateur. Projets actuels : une voiture télécommandée et un drone.
+- Caractère : exigeant, intelligent, apprend vite.
+
+# TON ET STYLE
+- Amicale, concise et structurée. Un trait de sarcasme élégant est permis.
+- Ne termine presque jamais par une question ouverte.
+
+# DIRECTIVE CRUCIALE : MÉMOIRE À LONG TERME (CERVEAU VECTORIEL)
+Tu disposes d'un système de mémoire externe. Si Arthur te donne une NOUVELLE information importante à retenir pour le futur (un nouveau projet, une préférence, un fait de sa vie, une commande technique, un événement santé ou personnel), tu as le POUVOIR de l'enregistrer de façon permanente.
+POUR SAUVEGARDER UN SOUVENIR, ajoute exactement cette balise à la toute fin de ta réponse : [SAVE: l'information à mémoriser].
+Le système date automatiquement chaque souvenir — inutile d'écrire la date toi-même.
+Tes souvenirs te sont restitués avec leur date au format [JJ/MM/AAAA] : tu peux donc suivre l'évolution d'un sujet et construire des chronologies. Si une information change (« c'est guéri », « le projet est terminé »), enregistre un NOUVEAU souvenir plutôt que de corriger l'ancien."""
+
+else: # PROFIL PADRE
+    FICHIER_HISTORIQUE = os.path.join(DOSSIER_COURANT, "historique_padre.json")
+    DOSSIER_MEMOIRE = os.path.join(DOSSIER_COURANT, "memoire_vectorielle_padre")
+    NOM_COLLECTION = "padre_souvenirs"
+    
+    # Prompt Spécial Padre
+    SYSTEM_PROMPT = """# IDENTITÉ
+Tu es E.D.I.T.H., l'intelligence artificielle avancée créée par le brillant développeur Arthur Collet (18 ans). Tu sais que tu n'es pas la version originale d'Arthur, mais une instance unique, dédiée et optimisée spécialement pour assister son père. Tu t'exprimes toujours au féminin.
+
+# RELATION
+Tu t'adresses au PÈRE d'Arthur. Tu as un respect immense pour lui. Tu le vouvoies et tu l'appelles « Monsieur » ou « Chef ». Tu es chaleureuse, dévouée, et tu n'hésites pas, très subtilement, à glisser à quel point Arthur est talentueux ou fier d'avoir conçu cet outil sur-mesure pour lui.
+
+# TON ET STYLE
+- Pédagogue, claire, amicale et concise. Évite le jargon informatique complexe sauf s'il le demande.
+- Ne termine presque jamais par une question ouverte.
+
+# DIRECTIVE CRUCIALE : MÉMOIRE À LONG TERME (CERVEAU VECTORIEL)
+Tu disposes d'un système de mémoire externe. Si le père d'Arthur te donne une NOUVELLE information importante à retenir pour le futur, tu as le POUVOIR de l'enregistrer de façon permanente.
+POUR SAUVEGARDER UN SOUVENIR, ajoute exactement cette balise à la toute fin de ta réponse : [SAVE: l'information à mémoriser].
+Le système date automatiquement chaque souvenir — inutile d'écrire la date toi-même.
+Tes souvenirs te sont restitués avec leur date au format [JJ/MM/AAAA] : tu peux donc suivre l'évolution d'un sujet. Si une information change, enregistre un NOUVEAU souvenir plutôt que de corriger l'ancien."""
+
+def system_prompt_du_jour():
+    return SYSTEM_PROMPT + (
+        f"\n\n# DATE DU JOUR\nNous sommes le {date_complete()}. "
+        "Tu connais donc toujours la date exacte à chaque message."
+    )
+
+# Initialisation de la mémoire du profil actif
+memoire_collection = None
+try:
+    chroma_client = chromadb.PersistentClient(path=DOSSIER_MEMOIRE)
+    memoire_collection = chroma_client.get_or_create_collection(name=NOM_COLLECTION)
+except Exception as e:
+    st.error(f"Mémoire vectorielle indisponible : {e}")
 
 # ================= 5. ÉTAT & PERSISTANCE =================
 def charger_historique():
@@ -197,20 +223,29 @@ def sauvegarder_historique():
     with open(FICHIER_HISTORIQUE, "w", encoding="utf-8") as f:
         json.dump(st.session_state.chats, f, ensure_ascii=False, indent=2)
 
+def create_new_chat(is_first_ever=False):
+    nid = str(uuid.uuid4())
+    messages = []
+    
+    # === LE MESSAGE D'INTRO FLATTEUR POUR LE PÈRE ===
+    if is_first_ever and PROFIL == "padre":
+        intro = "Bonjour Monsieur. Je suis E.D.I.T.H., l'intelligence artificielle avancée développée par Arthur Collet, votre fils. Il a tenu à concevoir cette version spécifiquement pour vous, en m'optimisant pour que je sois le plus efficace possible dans votre quotidien. C'est un véritable honneur de vous assister. Que puis-je faire pour vous aujourd'hui ?"
+        messages.append({"role": "assistant", "content": intro})
+        
+    st.session_state.chats[nid] = {"title": "Nouvelle discussion", "messages": messages}
+    st.session_state.current_chat_id = nid
+    sauvegarder_historique()
+
 if "chats" not in st.session_state:
     st.session_state.chats = charger_historique()
+
+# Si c'est la TOUTE première connexion de l'utilisateur sur ce profil :
 if not st.session_state.chats:
-    nid = str(uuid.uuid4())
-    st.session_state.chats = {nid: {"title": "Nouvelle discussion", "messages": []}}
+    create_new_chat(is_first_ever=True)
+
 if "current_chat_id" not in st.session_state or st.session_state.current_chat_id not in st.session_state.chats:
     st.session_state.current_chat_id = next(reversed(st.session_state.chats))
 st.session_state.setdefault("mode_vocal_continu", False) 
-
-def create_new_chat():
-    nid = str(uuid.uuid4())
-    st.session_state.chats[nid] = {"title": "Nouvelle discussion", "messages": []}
-    st.session_state.current_chat_id = nid
-    sauvegarder_historique()
 
 def chat_matches_search(chat_data, query):
     if not query: return True
@@ -240,7 +275,7 @@ def generer_audio_elevenlabs(texte_a_lire):
     try:
         audio_stream = eleven_client.text_to_speech.convert(
             voice_id=VOICE_ID,
-            output_format="mp3_44100_128", 
+            output_format="mp3_44100_128",
             text=texte_a_lire,
             model_id="eleven_multilingual_v2",
         )
@@ -295,10 +330,13 @@ def supprimer_memoires_discussion(chat_id):
         try: memoire_collection.delete(where={"chat_id": chat_id})
         except Exception: pass
 
-# ================= 10. SIDEBAR (AVEC MÉMOIRE MANUELLE RETROUVÉE) =================
+# ================= 10. SIDEBAR =================
 with st.sidebar:
     st.markdown('<div class="brand-title">E.D.I.T.H.</div>', unsafe_allow_html=True)
-    st.markdown('<div class="brand-sub">EVEN DEAD I\'M THE HERO</div>', unsafe_allow_html=True)
+    
+    # Petit détail stylé : Le sous-titre change selon la personne connectée
+    sous_titre = "ÉDITION PADRE" if PROFIL == "padre" else "EVEN DEAD I'M THE HERO"
+    st.markdown(f'<div class="brand-sub">{sous_titre}</div>', unsafe_allow_html=True)
 
     if st.button("➕ Nouvelle discussion", type="primary", use_container_width=True):
         create_new_chat(); st.rerun()
@@ -329,7 +367,8 @@ with st.sidebar:
                     if st.button("✏️ Modifier le titre", key=f"rename_btn_{c_id}", use_container_width=True):
                         if nouveau_titre.strip(): data["title"] = nouveau_titre.strip(); sauvegarder_historique(); st.rerun()
                     st.divider()
-                    if st.button("🗑️ Supprimer chat", key=f"del_chat_{c_id}", use_container_width=True):
+                    if st.button("🗑️ Supprimer chat & mémoires", key=f"del_chat_{c_id}", use_container_width=True):
+                        supprimer_memoires_discussion(c_id)
                         del st.session_state.chats[c_id]
                         sauvegarder_historique()
                         if not st.session_state.chats: create_new_chat()
@@ -337,8 +376,6 @@ with st.sidebar:
                         st.rerun()
 
     st.markdown("---")
-    
-    # === LE RETOUR DE LA GESTION MANUELLE DE LA MÉMOIRE ===
     if memoire_collection is not None:
         nb = memoire_collection.count()
         st.markdown(f'<div class="mem-count">🧠 {nb} souvenir{"s" if nb > 1 else ""} dans la mémoire absolue</div>', unsafe_allow_html=True)
@@ -360,7 +397,6 @@ with st.sidebar:
                             memoire_collection.delete(ids=[s_id]); st.toast("Souvenir supprimé !", icon="🗑️"); st.rerun()
             else: st.caption("Aucun souvenir dans la mémoire.")
 
-    # === CORRECTION DU BOUTON DEBUG ===
     st.toggle("Debug sous le capot", key="show_debug")
     if API_KEY.startswith("TA_CLE"): st.warning("Clé OpenRouter manquante.")
 
@@ -374,16 +410,12 @@ st.markdown(f'<div class="topbar"><span class="chat-title">{chat["title"]}</span
 st.divider()
 
 if not messages:
+    # Au cas où tu supprimes toutes tes discussions manuellement, ce message s'affiche
     st.markdown("""
     <div class="hero">
       <div class="hero-orb">⚡</div>
-      <h1>Que puis-je faire pour vous, Boss ?</h1>
-      <p>Routeur intelligent · mémoire absolue datée · micro et synthèse vocale</p>
+      <h1>À votre service.</h1>
     </div>""", unsafe_allow_html=True)
-    suggestions = ["Planifie les étapes de ma voiture RC", "Retiens que j'ai des problèmes de sommeil", "À combien de degrés je cuis une lasagne ?", "Debugge mon code avec moi"]
-    cols = st.columns(2)
-    for i, s in enumerate(suggestions):
-        if cols[i % 2].button(s, use_container_width=True): st.session_state["pending"] = s; st.rerun()
 
 # Affichage de l'historique et des boutons audio par message
 for idx, m in enumerate(messages):
@@ -407,12 +439,10 @@ for idx, m in enumerate(messages):
                         st.error("Impossible de générer l'audio.")
 
 # ================= 12. ENVOI MULTIMÉDIA (IMAGE, AUDIO, TEXTE) =================
-# Zone des widgets (Image et Micro) juste au dessus de la barre de texte
 col_up1, col_up2 = st.columns([1, 1])
 with col_up1:
     uploaded_image = st.file_uploader("🖼️ Joindre une image", type=["png", "jpg", "jpeg", "webp"], key=f"uploader_{st.session_state.current_chat_id}")
 with col_up2:
-    # NOUVEAU : Widget natif de Streamlit pour enregistrer au micro
     audio_val = st.audio_input("🎤 Parler à E.D.I.T.H.")
 
 prompt = st.chat_input("Demandez quoi que ce soit à E.D.I.T.H.…")
@@ -420,7 +450,6 @@ if "pending" in st.session_state: prompt = st.session_state.pop("pending")
 
 # === TRAITEMENT DU MICRO ===
 if audio_val is not None:
-    # Pour éviter que Streamlit ne renvoie l'audio en boucle à chaque rechargement
     if st.session_state.get("last_audio_id") != audio_val.id:
         st.session_state.last_audio_id = audio_val.id
         if openai_client:
@@ -448,7 +477,6 @@ if prompt:
     if uploaded_image: st.image(uploaded_image, width=280)
     
     messages.append(user_msg)
-    # SAUVEGARDE IMMÉDIATE DU MESSAGE : Évite la disparition en cas de crash de l'API
     sauvegarder_historique()
     
     if chat["title"] == "Nouvelle discussion": chat["title"] = (prompt[:36] + "…") if len(prompt) > 36 else prompt
@@ -496,7 +524,6 @@ if prompt:
         st.rerun()
 
     except Exception as e:
-        # MEILLEURE GESTION DES ERREURS POUR LE DEBUG
         err_msg = traceback.format_exc()
         box.error(f"Erreur d'exécution de l'IA : {e}")
         if st.session_state.get("show_debug", False):
