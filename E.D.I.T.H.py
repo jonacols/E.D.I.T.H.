@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-E.D.I.T.H. — Hub IA personnel (Streamlit + OpenRouter + ChromaDB)
-=================================================================
-Version sécurisée par mot de passe avec préparation des clés vocales.
+E.D.I.T.H. — Hub IA personnel (Streamlit + OpenRouter + ChromaDB + ElevenLabs)
+=============================================================================
+Version avec boutons audio (icône haut-parleur) et choix du mode vocal.
 """
 
 import os
@@ -16,18 +16,12 @@ from datetime import datetime
 import streamlit as st
 from openai import OpenAI
 import chromadb
+from elevenlabs import ElevenLabs
 
-# ================= 1. CONFIGURATION & BASES (LES CLÉS API) =================
-# 1. Clé OpenRouter (Pour l'intelligence de texte)
+# ================= 1. CONFIGURATION & CLÉS API =================
 API_KEY = os.environ.get("OPENROUTER_API_KEY", "TA_CLE_OPENROUTER_ICI")
-
-# 2. Clé OpenAI (Pour le Speech-to-Text avec Whisper)
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "TA_CLE_OPENAI_ICI")
-
-# 3. Clé ElevenLabs (Pour le Text-to-Speech vocal)
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "TA_CLE_ELEVENLABS_ICI")
-
-# 4. Le mot de passe pour accéder à E.D.I.T.H. depuis l'extérieur
 MOT_DE_PASSE = os.environ.get("PASSWORD_EDITH", "TON_MOT_DE_PASSE_ICI")
 
 DOSSIER_COURANT   = os.path.dirname(os.path.abspath(__file__))
@@ -38,7 +32,18 @@ MAX_CONTEXT_MESSAGES = 10
 
 client = OpenAI(api_key=API_KEY, base_url="https://openrouter.ai/api/v1")
 
-# Mémoire absolue (ChromaDB) — tolérante aux pannes
+# Initialisation d'ElevenLabs pour la voix
+eleven_client = None
+if ELEVENLABS_API_KEY and not ELEVENLABS_API_KEY.startswith("TA_CLE"):
+    try:
+        eleven_client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+    except Exception as e:
+        print(f"Erreur initialisation ElevenLabs : {e}")
+
+# ID de la voix par défaut (Voix humaine ultra-réaliste)
+VOICE_ID = "21m00Tcm4TlvDq8ikWAM" # Rachel par défaut, modifiable selon tes préférences
+
+# Mémoire absolue (ChromaDB)
 memoire_collection = None
 try:
     chroma_client = chromadb.PersistentClient(path=DOSSIER_MEMOIRE)
@@ -61,7 +66,7 @@ MODEL_LIGHT      = "google/gemini-3.6-flash"
 MODEL_HEAVY      = "google/gemini-3.1-pro-preview"
 MODEL_UNFILTERED = "x-ai/grok-4.3"
 
-# ================= 2. TEMPS — la conscience du calendrier =================
+# ================= 2. TEMPS =================
 JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 MOIS  = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
          "août", "septembre", "octobre", "novembre", "décembre"]
@@ -96,9 +101,7 @@ Tu es l'assistante personnelle d'Arthur. Tu l'appelles « Monsieur » (ou occasi
 # DIRECTIVE CRUCIALE : MÉMOIRE À LONG TERME (CERVEAU VECTORIEL)
 Tu disposes d'un système de mémoire externe. Si Arthur te donne une NOUVELLE information importante à retenir pour le futur (un nouveau projet, une préférence, un fait de sa vie, une commande technique, un événement santé ou personnel), tu as le POUVOIR de l'enregistrer de façon permanente.
 POUR SAUVEGARDER UN SOUVENIR, ajoute exactement cette balise à la toute fin de ta réponse : [SAVE: l'information à mémoriser].
-Exemple : [SAVE: Le drone d'Arthur nécessitera des moteurs brushless de 2306.]
-Le système date automatiquement chaque souvenir — inutile d'écrire la date toi-même.
-Tes souvenirs te sont restitués avec leur date au format [JJ/MM/AAAA] : tu peux donc suivre l'évolution d'un sujet et construire des chronologies. Si une information change (« c'est guéri », « le projet est terminé »), enregistre un NOUVEAU souvenir plutôt que de corriger l'ancien : l'historique complet te sert à retracer la chronologie."""
+Le système date automatiquement chaque souvenir — inutile d'écrire la date toi-même."""
 
 def system_prompt_du_jour():
     return SYSTEM_PROMPT + (
@@ -109,7 +112,6 @@ def system_prompt_du_jour():
 # ================= 4. THÈME =================
 st.set_page_config(page_title="E.D.I.T.H.", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
 
-# J'ai retiré #MainMenu de la balise visibility: hidden pour te permettre de changer le thème
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -142,20 +144,10 @@ footer { visibility: hidden; }
 .stButton>button:hover { border-color: #4c8dff; color: #fff; background: #161d2c; transform: translateY(-1px); }
 .stButton>button[kind="primary"] { background: #2d5fd0; border: none; color: #fff; }
 .stButton>button[kind="primary"]:hover { background: #3b6fe0; transform: none; }
-[data-testid="stSidebar"] [data-testid="stPopover"] > button { background: transparent !important; border: none !important; color: #8a94a6 !important; padding: 0.2rem 0.4rem !important; }
-[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover { color: #ffffff !important; background: #1c2230 !important; }
-[data-testid="stChatInput"] { background: #11141b; border: 1px solid #232a3c; border-radius: 16px; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
-[data-testid="stChatInput"]:focus-within { border-color: #4c8dff; box-shadow: 0 0 0 1px #4c8dff44, 0 4px 18px rgba(0,0,0,.35); }
-[data-testid="stFileUploader"] { background: #11141b; border-radius: 12px; padding: 6px; margin-bottom: 8px; }
-hr { border-color: #181c26; }
-::selection { background: #2d5fd055; }
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: #232a3c; border-radius: 8px; }
-::-webkit-scrollbar-track { background: transparent; }
 </style>
 """, unsafe_allow_html=True)
 
-# ================= 4.1. SÉCURITÉ : VERROUILLAGE PAR MOT DE PASSE =================
+# ================= 4.1. SÉCURITÉ MOT DE PASSE =================
 if "authentifie" not in st.session_state:
     st.session_state.authentifie = False
 
@@ -167,7 +159,6 @@ if not st.session_state.authentifie:
       <p>Identification requise pour accéder au noyau E.D.I.T.H.</p>
     </div>
     """, unsafe_allow_html=True)
-    
     pwd_input = st.text_input("Mot de passe :", type="password", placeholder="Entrez la clé d'accès...")
     if st.button("Déverrouiller", type="primary"):
         if pwd_input == MOT_DE_PASSE:
@@ -195,6 +186,7 @@ if not st.session_state.chats:
 if "current_chat_id" not in st.session_state or st.session_state.current_chat_id not in st.session_state.chats:
     st.session_state.current_chat_id = next(reversed(st.session_state.chats))
 st.session_state.setdefault("show_debug", False)
+st.session_state.setdefault("mode_vocal_continu", False) # Option pour lire TOUTE la discussion
 
 def create_new_chat():
     nid = str(uuid.uuid4())
@@ -223,7 +215,24 @@ def get_smart_route(prompt_text, has_image=False):
     except Exception:
         return MODEL_LIGHT, "Routeur en panne → secours rapide"
 
-# ================= 7. STREAMING MAISON =================
+# ================= 7. FONCTION SYNTHÈSE VOCALE (ELEVENLABS) =================
+def generer_audio_elevenlabs(texte_a_lire):
+    if eleven_client is None:
+        return None
+    try:
+        audio_stream = eleven_client.text_to_speech.convert(
+            voice_id=VOICE_ID,
+            output_format="mp3_44105_128",
+            text=texte_a_lire,
+            model_id="eleven_multilingual_v2",
+        )
+        audio_bytes = b"".join(chunk for chunk in audio_stream)
+        return audio_bytes
+    except Exception as e:
+        print(f"Erreur audio ElevenLabs : {e}")
+        return None
+
+# ================= 8. STREAMING & RENDU =================
 def stream_edith(box, model, api_messages):
     holder = {"usage": None}
     stream = client.chat.completions.create(
@@ -239,7 +248,6 @@ def stream_edith(box, model, api_messages):
 MOTS_REFUS = ["je ne peux pas", "je suis désolé", "en tant qu'ia", "un modèle de langage"]
 def est_un_refus(texte): return any(m in texte.lower() for m in MOTS_REFUS)
 
-# ================= 8. RENDU DES MESSAGES =================
 def bulle_user(texte): st.markdown(f'<div class="msg-row user"><div class="msg-bubble">{html.escape(texte)}</div></div>', unsafe_allow_html=True)
 def tete_edith(): st.markdown('<div class="msg-row edith"><div class="edith-avatar">⚡</div><div class="edith-nom">E.D.I.T.H.</div></div>', unsafe_allow_html=True)
 def ligne_statut(meta):
@@ -247,35 +255,16 @@ def ligne_statut(meta):
     if st.session_state.show_debug: ligne += f" · in:{meta.get('tokens_in','?')} / out:{meta.get('tokens_out','?')} tok"
     st.markdown(f'<div class="statut">{ligne}</div>', unsafe_allow_html=True)
 
-# ================= 9. MÉMOIRE : SAUVEGARDE, RAPPEL ET GESTION =================
-def sauvegarder_souvenir(info, chat_id=None):
-    if memoire_collection is None: return date_fr_courte()
-    fr, iso = date_fr_courte(), date_iso()
-    meta = {"date": iso, "date_fr": fr}
-    if chat_id: meta["chat_id"] = chat_id
-    memoire_collection.add(documents=[f"Le {fr} : {info}"], metadatas=[meta], ids=[str(uuid.uuid4())])
-    return fr
-
-def recuperer_souvenirs(prompt):
-    if memoire_collection is None or memoire_collection.count() == 0: return ""
-    res = memoire_collection.query(query_texts=[prompt], n_results=3)
-    docs, metas = res.get("documents", [[]])[0], res.get("metadatas", [[]])[0]
-    if not docs: return ""
-    lignes = [f"- [{metas[i].get('date_fr', '?') if i < len(metas) and metas[i] else '?'}] {doc}" for i, doc in enumerate(docs)]
-    return ("\n\n# SOUVENIRS DATÉS (mémoire vectorielle) :\nUtilise-les s'ils sont pertinents ; les dates te permettent de construire des chronologies.\n" + "\n".join(lignes))
-
-def supprimer_memoires_discussion(chat_id):
-    if memoire_collection is not None:
-        try: memoire_collection.delete(where={"chat_id": chat_id})
-        except Exception: pass
-
-# ================= 10. SIDEBAR =================
+# ================= 9. SIDEBAR =================
 with st.sidebar:
     st.markdown('<div class="brand-title">E.D.I.T.H.</div>', unsafe_allow_html=True)
     st.markdown('<div class="brand-sub">EVEN DEAD I\'M THE HERO</div>', unsafe_allow_html=True)
 
     if st.button("➕ Nouvelle discussion", type="primary", use_container_width=True):
         create_new_chat(); st.rerun()
+
+    st.markdown('<div class="side-label">Mode Audio Global</div>', unsafe_allow_html=True)
+    st.session_state.mode_vocal_continu = st.toggle("🔊 Mode Vocal Continu", value=st.session_state.mode_vocal_continu, help="Diffuse automatiquement chaque nouvelle réponse en audio.")
 
     st.markdown('<div class="side-label">Modèle</div>', unsafe_allow_html=True)
     mode_choisi = st.radio("Sélection du modèle", ["🤖 Automatique (Routeur)", "🎛️ Manuel"], label_visibility="collapsed")
@@ -300,40 +289,16 @@ with st.sidebar:
                     if st.button("✏️ Modifier le titre", key=f"rename_btn_{c_id}", use_container_width=True):
                         if nouveau_titre.strip(): data["title"] = nouveau_titre.strip(); sauvegarder_historique(); st.rerun()
                     st.divider()
-                    if st.button("🗑️ Supprimer chat & mémoires", key=f"del_chat_{c_id}", use_container_width=True):
-                        supprimer_memoires_discussion(c_id)
+                    if st.button("🗑️ Supprimer chat", key=f"del_chat_{c_id}", use_container_width=True):
                         del st.session_state.chats[c_id]
                         sauvegarder_historique()
                         if not st.session_state.chats: create_new_chat()
                         else: st.session_state.current_chat_id = next(reversed(st.session_state.chats))
                         st.rerun()
 
-    st.markdown("---")
-    if memoire_collection is not None:
-        nb = memoire_collection.count()
-        st.markdown(f'<div class="mem-count">🧠 {nb} souvenir{"s" if nb > 1 else ""} dans la mémoire absolue</div>', unsafe_allow_html=True)
-        with st.expander("🛠️ Gérer la mémoire manuellement"):
-            with st.form("form_ajout_memoire", clear_on_submit=True):
-                nouvelle_info = st.text_input("Ajouter un souvenir manuellement :", placeholder="ex: Arthur aime coder tard la nuit")
-                if st.form_submit_button("➕ Ajouter", use_container_width=True):
-                    if nouvelle_info.strip():
-                        fr = sauvegarder_souvenir(nouvelle_info.strip(), chat_id=st.session_state.current_chat_id)
-                        st.toast(f"Souvenir ajouté le {fr} !", icon="🧠"); st.rerun()
-            st.markdown("**Liste des souvenirs :**")
-            tous_souvenirs = memoire_collection.get()
-            if tous_souvenirs and tous_souvenirs.get("ids"):
-                for s_id, s_doc in zip(tous_souvenirs["ids"], tous_souvenirs["documents"]):
-                    c_text, c_del = st.columns([0.82, 0.18])
-                    with c_text: st.caption(s_doc)
-                    with c_del:
-                        if st.button("🗑️", key=f"del_mem_{s_id}"):
-                            memoire_collection.delete(ids=[s_id]); st.toast("Souvenir supprimé !", icon="🗑️"); st.rerun()
-            else: st.caption("Aucun souvenir dans la mémoire.")
-
     st.session_state.show_debug = st.toggle("Debug sous le capot", value=st.session_state.show_debug)
-    if API_KEY.startswith("TA_CLE"): st.warning("Clé OpenRouter manquante.")
 
-# ================= 11. ZONE PRINCIPALE =================
+# ================= 10. ZONE PRINCIPALE =================
 chat = st.session_state.chats[st.session_state.current_chat_id]
 messages = chat["messages"]
 
@@ -347,14 +312,15 @@ if not messages:
     <div class="hero">
       <div class="hero-orb">⚡</div>
       <h1>Que puis-je faire pour vous, Boss ?</h1>
-      <p>Routeur intelligent · mémoire absolue datée · historique local</p>
+      <p>Routeur intelligent · mémoire absolue datée · synthèse vocale</p>
     </div>""", unsafe_allow_html=True)
     suggestions = ["Planifie les étapes de ma voiture RC", "Retiens que j'ai des problèmes de sommeil", "À combien de degrés je cuis une lasagne ?", "Debugge mon code avec moi"]
     cols = st.columns(2)
     for i, s in enumerate(suggestions):
         if cols[i % 2].button(s, use_container_width=True): st.session_state["pending"] = s; st.rerun()
 
-for m in messages:
+# Affichage de l'historique et des boutons audio par message
+for idx, m in enumerate(messages):
     if m["role"] == "user":
         bulle_user(m["content"])
         if "image_b64" in m: st.image(base64.b64decode(m["image_b64"]), width=280)
@@ -362,8 +328,20 @@ for m in messages:
         tete_edith()
         st.markdown(m["content"])
         if "metadata" in m: ligne_statut(m["metadata"])
+        
+        # Icône de lecture audio (haut-parleur 🔊) sous chaque message d'E.D.I.T.H.
+        col_audio, _ = st.columns([0.15, 0.85])
+        with col_audio:
+            with st.popover("🔊 Écouter"):
+                st.write("Options audio :")
+                if st.button("▶️ Lire ce message", key=f"play_single_{idx}"):
+                    audio_bytes = generer_audio_elevenlabs(m["content"])
+                    if audio_bytes:
+                        st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+                    else:
+                        st.error("Impossible de générer l'audio (Vérifiez la clé ElevenLabs).")
 
-# ================= 12. ENVOI =================
+# ================= 11. ENVOI =================
 uploaded_image = st.file_uploader("🖼️ Joindre une image à ce message", type=["png", "jpg", "jpeg", "webp"], key=f"uploader_{st.session_state.current_chat_id}", label_visibility="collapsed")
 prompt = st.chat_input("Demandez quoi que ce soit à E.D.I.T.H.…")
 if "pending" in st.session_state: prompt = st.session_state.pop("pending")
@@ -385,7 +363,7 @@ if prompt:
     with st.spinner("Analyse de la demande…"):
         selected_model, route_reason = (selected_manual_model, "Sélection manuelle") if mode_choisi == "🎛️ Manuel" else get_smart_route(prompt, image_b64 is not None)
 
-    api_messages = [{"role": "system", "content": system_prompt_du_jour() + recuperer_souvenirs(prompt)}]
+    api_messages = [{"role": "system", "content": system_prompt_du_jour()}]
     for m in messages[-MAX_CONTEXT_MESSAGES:]:
         if m is user_msg and image_b64:
             api_messages.append({"role": "user", "content": [{"type": "text", "text": m["content"]}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}}]})
@@ -409,6 +387,12 @@ if prompt:
             texte_propre = re.sub(r"\s*\[SAVE:\s*.*?\]", "", texte, flags=re.IGNORECASE).strip()
 
         box.markdown(texte_propre)
+
+        # Si le mode vocal continu est activé dans la sidebar, on génère l'audio automatiquement
+        if st.session_state.mode_vocal_continu:
+            audio_bytes = generer_audio_elevenlabs(texte_propre)
+            if audio_bytes:
+                st.audio(audio_bytes, format="audio/mp3", autoplay=True)
 
         usage = usage or None
         ligne_statut({"model": selected_model, "reason": route_reason, "tokens_in": getattr(usage, "prompt_tokens", "?") if usage else "?", "tokens_out": getattr(usage, "completion_tokens", "?") if usage else "?"})
