@@ -495,10 +495,22 @@ if prompt:
     try:
         texte, usage = stream_edith(box, selected_model, api_messages)
 
-        if est_un_refus(texte) and selected_model != MODEL_UNFILTERED:
+        # NOUVELLE LOGIQUE DE REFUS :
+        # 1. On ne reroute QUE si on est en mode Automatique (le mode Manuel est roi)
+        # 2. Si on reroute, on sauvegarde l'ancienne réponse dans le Debug
+        if mode_choisi == "🤖 Automatique (Routeur)" and est_un_refus(texte) and selected_model != MODEL_UNFILTERED:
+            
+            # On affiche l'ancien texte censuré SI le debug est activé, pour ne pas le perdre !
+            if st.session_state.get("show_debug", False):
+                with st.expander("⚠️ DÉBOGAGE : Réponse originale effacée (Faux positif ?)"):
+                    st.write(texte)
+
             st.toast("Refus détecté — bascule sur Grok 4.3", icon="🛡️")
             selected_model = MODEL_UNFILTERED
             route_reason += " ➔ reroutage post-refus"
+            
+            # On vide la boîte et on relance
+            box.empty()
             texte, usage = stream_edith(box, selected_model, api_messages)
 
         texte_propre = texte
