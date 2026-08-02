@@ -2,8 +2,8 @@
 """
 E.D.I.T.H. — Hub IA personnel V2 (Multi-Profils : Arthur & Padre)
 =================================================================
-V2 : sécurité renforcée, bugs corrigés, 13 fonctionnalités ajoutées.
-(Version complète restaurée avec correctif de syntaxe et Super-Débogage).
+V2 par Kimi : sécurité renforcée, PDF, Incognito, Rappels, Budget.
+Syntaxe réparée + Bug de la Selectbox (StreamlitAPIException) corrigé.
 """
 
 import os
@@ -41,8 +41,7 @@ def get_secret(cle, defaut=None):
     """Lit st.secrets puis les variables d'environnement. Jamais de fallback en clair."""
     try:
         val = st.secrets.get(cle, None)
-        if val:
-            return val
+        if val: return val
     except Exception:
         pass
     return os.environ.get(cle, defaut)
@@ -51,7 +50,7 @@ API_KEY            = get_secret("OPENROUTER_API_KEY")
 OPENAI_API_KEY     = get_secret("OPENAI_API_KEY")
 ELEVENLABS_API_KEY = get_secret("ELEVENLABS_API_KEY")
 VOICE_ID           = get_secret("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
-MOT_DE_PASSE_ARTHUR = get_secret("PASSWORD_ARTHUR")   # None si absent -> accès impossible
+MOT_DE_PASSE_ARTHUR = get_secret("PASSWORD_ARTHUR")
 MOT_DE_PASSE_PADRE  = get_secret("PASSWORD_PADRE")
 BUDGET_ALERTE      = float(get_secret("BUDGET_ALERTE_EUR", 10))
 TAUX_USD_EUR       = 0.92
@@ -59,9 +58,9 @@ TAUX_USD_EUR       = 0.92
 DOSSIER_COURANT = os.path.dirname(os.path.abspath(__file__))
 FICHIER_SECURITE = os.path.join(DOSSIER_COURANT, ".securite_edith.json")
 
-MAX_CONTEXT_MESSAGES = 30          # fenêtre glissante (compression au-delà)
-SEUIL_PERTINENCE_DEFAUT = 1.25     # distance L2 Chroma/MiniLM ; plus petit = plus pertinent
-SEUIL_DOUBLON = 0.12               # en dessous -> souvenir quasi identique, on ignore
+MAX_CONTEXT_MESSAGES = 30
+SEUIL_PERTINENCE_DEFAUT = 1.25
+SEUIL_DOUBLON = 0.12
 
 # ================= 2. MODÈLES =================
 MODELS_MANUAL = {
@@ -79,7 +78,7 @@ MODELS_MANUAL_PADRE = {
     "DeepSeek (polyvalent)":      "deepseek/deepseek-v3.2",
     "Llama 70B (solide)":         "meta-llama/llama-3.3-70b-instruct",
 }
-MODEL_ROUTER     = "google/gemini-3.6-flash"   # routeur économique
+MODEL_ROUTER     = "google/gemini-3.6-flash"
 MODEL_LIGHT      = "google/gemini-3.6-flash"
 MODEL_HEAVY      = "google/gemini-3.1-pro-preview"
 MODEL_CODE       = "moonshotai/kimi-k3"
@@ -90,7 +89,6 @@ MODELES_VISION   = {
     "google/gemini-3.6-flash", "google/gemini-3.1-pro-preview",
     "openai/gpt-5.5", "anthropic/claude-3.5-sonnet", "x-ai/grok-4.3",
 }
-# Prix de secours ($/token) si l'API catalogue est injoignable — indicatifs
 PRIX_DEFAUT = {
     "google/gemini-3.6-flash":        {"in": 0.15e-6, "out": 0.60e-6},
     "deepseek/deepseek-v3.2":         {"in": 0.28e-6, "out": 0.42e-6},
@@ -104,8 +102,7 @@ PRIX_DEFAUT = {
 
 # ================= 3. TEMPS =================
 JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
-MOIS  = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
-         "août", "septembre", "octobre", "novembre", "décembre"]
+MOIS  = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
 def date_complete():
     n = datetime.now()
     return f"{JOURS[n.weekday()]} {n.day} {MOIS[n.month - 1]} {n.year}"
@@ -113,7 +110,7 @@ def heure_actuelle(): return datetime.now().strftime("%H:%M")
 def date_fr_courte(): return datetime.now().strftime("%d/%m/%Y")
 def date_iso(): return datetime.now().strftime("%Y-%m-%d")
 
-# ================= 4. THÈME & UI (inchangé, comme demandé) =================
+# ================= 4. THÈME & UI =================
 st.set_page_config(page_title="E.D.I.T.H.", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
@@ -161,7 +158,6 @@ hr { border-color: #181c26; }
 </style>
 """, unsafe_allow_html=True)
 
-# Balises PWA (iPhone : Réglages Safari -> "Sur l'écran d'accueil")
 components.html("""
 <script>
 try {
@@ -275,7 +271,7 @@ Tu es l'assistante personnelle d'Arthur. Tu l'appelles « Monsieur » (ou occasi
 - Ne termine presque jamais par une question ouverte.
 
 # DIRECTIVE CRUCIALE : MÉMOIRE À LONG TERME (CERVEAU VECTORIEL)
-Tu disposes d'un système de mémoire externe. Si Arthur te donne une NOUVELLE information importante à retenir pour le futur (un nouveau projet, une préférence, un fait de sa vie, une commande technique, un événement santé ou personnel), tu as le POUVOIR de l'enregistrer de façon permanente.
+Tu disposes d'un système de mémoire externe. Si Arthur te donne une NOUVELLE information importante à retenir pour le futur, tu as le POUVOIR de l'enregistrer de façon permanente.
 POUR SAUVEGARDER UN SOUVENIR, ajoute exactement cette balise à la toute fin de ta réponse : [SAVE: l'information à mémoriser].
 Le système date automatiquement chaque souvenir — inutile d'écrire la date toi-même.
 Tes souvenirs te sont restitués avec leur date au format [JJ/MM/AAAA] : tu peux donc suivre l'évolution d'un sujet et construire des chronologies. Si une information change (« c'est guéri », « le projet est terminé »), enregistre un NOUVEAU souvenir plutôt que de corriger l'ancien.
@@ -378,8 +374,7 @@ def supprimer_rappel(rid):
 
 def section_rappels_prompt():
     actifs = [r for r in charger_rappels() if not r.get("fait")]
-    if not actifs:
-        return ""
+    if not actifs: return ""
     actifs.sort(key=lambda x: (x["date"], x.get("heure", "")))
     lignes = [f"- [{r['date']} {r.get('heure') or ' journée'}] {r['message']}" for r in actifs[:15]]
     return "\n\n# RAPPELS ACTIFS\n" + "\n".join(lignes)
@@ -397,43 +392,33 @@ def system_prompt_du_jour(chat=None):
 
 # ================= 10. MÉMOIRE VECTORIELLE =================
 def backup_memoire():
-    if memoire_collection is None:
-        return
+    if memoire_collection is None: return
     try:
         data = memoire_collection.get()
         export = [{"id": i, "document": d, "metadata": m}
                   for i, d, m in zip(data["ids"], data["documents"], data["metadatas"])]
         ecrire_json_atomique(FICHIER_BACKUP_MEMOIRE, export)
-    except Exception:
-        pass
+    except Exception: pass
 
 def sauvegarder_souvenir(info, chat_id=None, projet=None, manuel=False):
-    """Retourne (date_fr, créé_bool). Déduplique et sauvegarde un backup."""
-    if memoire_collection is None:
-        return date_fr_courte(), False
+    if memoire_collection is None: return date_fr_courte(), False
     try:
         res = memoire_collection.query(query_texts=[info], n_results=1)
         dists = res.get("distances", [[]])[0]
-        if dists and dists[0] < SEUIL_DOUBLON:
-            return date_fr_courte(), False
-    except Exception:
-        pass
+        if dists and dists[0] < SEUIL_DOUBLON: return date_fr_courte(), False
+    except Exception: pass
     fr, iso = date_fr_courte(), date_iso()
     meta = {"date": iso, "date_fr": fr, "projet": projet or "Général"}
-    if chat_id and not manuel:
-        meta["chat_id"] = chat_id
+    if chat_id and not manuel: meta["chat_id"] = chat_id 
     memoire_collection.add(documents=[f"Le {fr} : {info}"], metadatas=[meta], ids=[str(uuid.uuid4())])
     backup_memoire()
     return fr, True
 
 def recuperer_souvenirs(prompt, projet_actif="Général"):
-    if memoire_collection is None or memoire_collection.count() == 0:
-        return ""
+    if memoire_collection is None or memoire_collection.count() == 0: return ""
     seuil = st.session_state.get("seuil_memoire", SEUIL_PERTINENCE_DEFAUT)
-    try:
-        res = memoire_collection.query(query_texts=[prompt], n_results=6)
-    except Exception:
-        return ""
+    try: res = memoire_collection.query(query_texts=[prompt], n_results=6)
+    except Exception: return ""
     docs  = res.get("documents", [[]])[0]
     metas = res.get("metadatas", [[]])[0]
     dists = res.get("distances", [[]])[0]
@@ -441,31 +426,23 @@ def recuperer_souvenirs(prompt, projet_actif="Général"):
     for i, doc in enumerate(docs):
         meta = metas[i] if i < len(metas) else {}
         dist = dists[i] if i < len(dists) else 99
-        if dist > seuil:
-            continue
+        if dist > seuil: continue
         candidats.append((0 if meta.get("projet") == projet_actif else 1, dist, meta, doc))
     candidats.sort(key=lambda x: (x[0], x[1]))
-    if not candidats:
-        return ""
+    if not candidats: return ""
     lignes = [f"- [{c[2].get('date_fr', '?')}] {c[3]}" for c in candidats[:4]]
-    return ("\n\n# SOUVENIRS DATÉS (mémoire vectorielle) :\nUtilise-les s'ils sont pertinents ; "
-            "les dates te permettent de construire des chronologies.\n" + "\n".join(lignes))
+    return ("\n\n# SOUVENIRS DATÉS (mémoire vectorielle) :\nUtilise-les s'ils sont pertinents.\n" + "\n".join(lignes))
 
 def supprimer_memoires_discussion(chat_id):
     for col in (memoire_collection, docs_collection):
         if col is not None:
-            try:
-                col.delete(where={"chat_id": chat_id})
-            except Exception:
-                pass
+            try: col.delete(where={"chat_id": chat_id})
+            except Exception: pass
     backup_memoire()
 
 # ================= 11. HISTORIQUE & CHATS =================
-def charger_historique():
-    return lire_json(FICHIER_HISTORIQUE, {})
-
-def sauvegarder_historique():
-    ecrire_json_atomique(FICHIER_HISTORIQUE, st.session_state.chats)
+def charger_historique(): return lire_json(FICHIER_HISTORIQUE, {})
+def sauvegarder_historique(): ecrire_json_atomique(FICHIER_HISTORIQUE, st.session_state.chats)
 
 def liste_projets():
     projets = set(lire_json(FICHIER_PROJETS, {"projets": []}).get("projets", []))
@@ -492,7 +469,7 @@ def create_new_chat(is_first_ever=False):
     st.session_state.chats[nid] = {
         "title": "Nouvelle discussion",
         "messages": messages,
-        "projet": st.session_state.get("widget_projet", "Général"),
+        "projet": st.session_state.get("projet_courant", "Général"),
         "titre_manuel": False,
     }
     st.session_state.current_chat_id = nid
@@ -505,10 +482,8 @@ def chat_courant():
         return st.session_state.chat_incognito
     return st.session_state.chats[st.session_state.current_chat_id]
 
-if "chats" not in st.session_state:
-    st.session_state.chats = charger_historique()
-if not st.session_state.chats:
-    create_new_chat(is_first_ever=True)
+if "chats" not in st.session_state: st.session_state.chats = charger_historique()
+if not st.session_state.chats: create_new_chat(is_first_ever=True)
 if "current_chat_id" not in st.session_state or st.session_state.current_chat_id not in st.session_state.chats:
     st.session_state.current_chat_id = next(reversed(st.session_state.chats))
 
@@ -521,10 +496,8 @@ st.session_state.setdefault("max_tokens", 4096)
 st.session_state.setdefault("seuil_memoire", SEUIL_PERTINENCE_DEFAUT)
 
 def chat_matches_search(chat_data, query):
-    if not query:
-        return True
-    if query.lower() in chat_data["title"].lower():
-        return True
+    if not query: return True
+    if query.lower() in chat_data["title"].lower(): return True
     return any(query.lower() in str(m.get("content", "")).lower() for m in chat_data["messages"])
 
 def exporter_markdown(chat_data):
@@ -537,8 +510,7 @@ def exporter_markdown(chat_data):
 # ================= 12. BUDGET TRACKER =================
 @st.cache_data(ttl=86400)
 def prix_openrouter_live():
-    if not REQUESTS_DISPONIBLE:
-        return {}
+    if not REQUESTS_DISPONIBLE: return {}
     try:
         r = requests.get("https://openrouter.ai/api/v1/models", timeout=8)
         out = {}
@@ -546,8 +518,7 @@ def prix_openrouter_live():
             p = m.get("pricing", {})
             out[m["id"]] = {"in": float(p.get("prompt") or 0), "out": float(p.get("completion") or 0)}
         return out
-    except Exception:
-        return {}
+    except Exception: return {}
 
 def estimer_cout(model, tin, tout):
     model = model.replace(":online", "")
@@ -555,8 +526,7 @@ def estimer_cout(model, tin, tout):
     return tin * prix["in"] + tout * prix["out"]
 
 def enregistrer_depense(model, usage, web_utilise=False):
-    if not usage:
-        return
+    if not usage: return
     tin  = getattr(usage, "prompt_tokens", 0) or 0
     tout = getattr(usage, "completion_tokens", 0) or 0
     mois = datetime.now().strftime("%Y-%m")
@@ -574,34 +544,23 @@ def get_smart_route(prompt_text, has_image=False, contexte=""):
         r = client.chat.completions.create(
             model=MODEL_ROUTER,
             messages=[{"role": "system", "content":
-                       "Classifie la demande par UN seul mot : "
-                       "SIMPLE (question factuelle, courte, quotidien), "
-                       "COMPLEXE (analyse, raisonnement, maths, longue réponse), "
-                       "CODE (programmation, débogage, électronique technique), "
-                       "CREATIVE (rédaction, brainstorming), "
-                       "SENSITIVE (sujet polémique ou peu filtré)."},
+                       "Classifie la demande par UN seul mot : SIMPLE, COMPLEXE, CODE, CREATIVE, SENSITIVE."},
                       {"role": "user", "content": contenu}],
             max_tokens=5, temperature=0)
         d = r.choices[0].message.content.strip().upper()
-    except Exception:
-        d = ""
+    except Exception: d = ""
 
-    if PROFIL == "padre":  # plafonné, jamais de Grok
+    if PROFIL == "padre":
         if "COMPLEXE" in d or "CREATIVE" in d or "CODE" in d:
             choix, raison = MODEL_HEAVY, "Requête avancée → modèle pro"
         else:
             choix, raison = MODEL_LIGHT, "Requête standard → modèle rapide"
     else:
-        if "CODE" in d:
-            choix, raison = MODEL_CODE, "Programmation → Kimi K3"
-        elif "COMPLEXE" in d:
-            choix, raison = MODEL_HEAVY, "Requête complexe → modèle lourd"
-        elif "CREATIVE" in d:
-            choix, raison = MODEL_CREATIVE, "Créatif → Grok"
-        elif "SENSITIVE" in d:
-            choix, raison = MODEL_UNFILTERED, "Sujet sensible → Grok"
-        else:
-            choix, raison = MODEL_LIGHT, "Requête standard → modèle rapide"
+        if "CODE" in d: choix, raison = MODEL_CODE, "Programmation → Kimi K3"
+        elif "COMPLEXE" in d: choix, raison = MODEL_HEAVY, "Requête complexe → modèle lourd"
+        elif "CREATIVE" in d: choix, raison = MODEL_CREATIVE, "Créatif → Grok"
+        elif "SENSITIVE" in d: choix, raison = MODEL_UNFILTERED, "Sujet sensible → Grok"
+        else: choix, raison = MODEL_LIGHT, "Requête standard → modèle rapide"
 
     if has_image and choix not in MODELES_VISION:
         choix, raison = (MODEL_HEAVY if "COMPLEXE" in d else MODEL_LIGHT), "Image → vision requise"
@@ -609,45 +568,17 @@ def get_smart_route(prompt_text, has_image=False, contexte=""):
         raison = "Routeur en panne → secours rapide"
     return choix, raison
 
-# ================= 14. AUDIO (cache + nettoyage) =================
-def nettoyer_pour_audio(t):
-    t = re.sub(r"```.*?```", " (bloc de code) ", t, flags=re.DOTALL)
-    t = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", t)
-    t = re.sub(r"[#*>`]", "", t)
-    return t[:4500]
-
-@st.cache_data(ttl=86400 * 7, max_entries=200, show_spinner=False)
-def generer_audio_cached(empreinte, texte, voice_id):
-    if eleven_client is None:
-        return None
-    try:
-        flux = eleven_client.text_to_speech.convert(
-            voice_id=voice_id, output_format="mp3_44100_128",
-            text=texte, model_id="eleven_multilingual_v2")
-        return b"".join(chunk for chunk in flux)
-    except Exception:
-        return None
-
-def generer_audio(texte):
-    propre = nettoyer_pour_audio(texte)
-    empreinte = hashlib.md5((propre + VOICE_ID).encode()).hexdigest()
-    return generer_audio_cached(empreinte, propre, VOICE_ID)
-
-# ================= 15. DOCUMENTS (PDF / TXT) =================
+# ================= 14. DOCUMENTS (PDF / TXT) =================
 def extraire_texte_fichier(fichier):
     nom = fichier.name.lower()
     if nom.endswith(".pdf"):
-        if not PDF_DISPONIBLE:
-            return None
+        if not PDF_DISPONIBLE: return None
         try:
             reader = PdfReader(fichier)
             return "\n".join(page.extract_text() or "" for page in reader.pages)
-        except Exception:
-            return None
-    try:
-        return fichier.getvalue().decode("utf-8", errors="replace")
-    except Exception:
-        return None
+        except Exception: return None
+    try: return fichier.getvalue().decode("utf-8", errors="replace")
+    except Exception: return None
 
 def decouper_en_chunks(texte, taille=1200, recouvrement=200):
     chunks, i = [], 0
@@ -657,8 +588,7 @@ def decouper_en_chunks(texte, taille=1200, recouvrement=200):
     return chunks
 
 def indexer_document(chat_id, nom, texte):
-    if docs_collection is None:
-        return 0
+    if docs_collection is None: return 0
     chunks = decouper_en_chunks(texte)
     docs_collection.add(
         documents=chunks,
@@ -667,26 +597,21 @@ def indexer_document(chat_id, nom, texte):
     return len(chunks)
 
 def extraits_pertinents(chat_id, prompt):
-    if docs_collection is None:
-        return ""
+    if docs_collection is None: return ""
     try:
         res = docs_collection.query(query_texts=[prompt], n_results=3, where={"chat_id": chat_id})
         docs = res.get("documents", [[]])[0]
-        if not docs:
-            return ""
+        if not docs: return ""
         return "\n\n# EXTRAITS DU DOCUMENT JOINT\n" + "\n---\n".join(docs)
-    except Exception:
-        return ""
+    except Exception: return ""
 
-# ================= 16. COMPRESSION DE CONTEXTE =================
+# ================= 15. COMPRESSION DE CONTEXTE =================
 def obtenir_resume(chat):
     msgs = chat["messages"]
-    if len(msgs) <= MAX_CONTEXT_MESSAGES + 8:
-        return chat.get("resume")
+    if len(msgs) <= MAX_CONTEXT_MESSAGES + 8: return chat.get("resume")
     anciens_total = len(msgs) - MAX_CONTEXT_MESSAGES
     deja = chat.get("resume_count", 0)
-    if anciens_total <= deja:
-        return chat.get("resume")
+    if anciens_total <= deja: return chat.get("resume")
     a_resumer = msgs[deja:anciens_total]
     texte = "\n".join(f"{'Utilisateur' if m['role'] == 'user' else 'EDITH'}: {str(m.get('content',''))[:500]}"
                       for m in a_resumer)
@@ -694,16 +619,14 @@ def obtenir_resume(chat):
         r = client.chat.completions.create(
             model=MODEL_LIGHT,
             messages=[{"role": "system", "content":
-                       "Résume cette conversation en 5 à 8 puces factuelles (sujets, décisions, informations clés). "
+                       "Résume cette conversation en 5 à 8 puces factuelles (sujets, décisions, infos clés). "
                        "Français, concis. Fusionne avec le résumé existant s'il y en a un."},
                       {"role": "user", "content": (chat.get("resume") or "") + "\n\n" + texte}],
             max_tokens=400, temperature=0.2)
         chat["resume"] = r.choices[0].message.content
         chat["resume_count"] = anciens_total
-        if not st.session_state.get("incognito"):
-            sauvegarder_historique()
-    except Exception:
-        pass
+        if not st.session_state.get("incognito"): sauvegarder_historique()
+    except Exception: pass
     return chat.get("resume")
 
 def construire_api_messages(chat, prompt_courant):
@@ -731,11 +654,9 @@ def construire_api_messages(chat, prompt_courant):
     return api
 
 def generer_titre_automatique(chat):
-    if chat.get("titre_manuel"):
-        return
+    if chat.get("titre_manuel"): return
     echanges = [m for m in chat["messages"] if m["role"] in ("user", "assistant")]
-    if len(echanges) < 2:
-        return
+    if len(echanges) < 2: return
     try:
         r = client.chat.completions.create(
             model=MODEL_LIGHT,
@@ -744,17 +665,34 @@ def generer_titre_automatique(chat):
                       {"role": "user", "content": "\n".join(str(m["content"])[:300] for m in echanges[:4])}],
             max_tokens=20, temperature=0.3)
         titre = r.choices[0].message.content.strip().strip('"').strip("'")[:50]
-        if titre:
-            chat["title"] = titre
-    except Exception:
-        pass
-    if chat["title"] == "Nouvelle discussion":  # secours si l'appel a échoué
+        if titre: chat["title"] = titre
+    except Exception: pass
+    if chat["title"] == "Nouvelle discussion":
         premier = next((str(m["content"]) for m in chat["messages"] if m["role"] == "user"), "")
         chat["title"] = (premier[:36] + "…") if len(premier) > 36 else (premier or "Discussion")
 
-# ================= 17. STREAMING & FALLBACK =================
+# ================= 16. AUDIO, STREAMING & FALLBACK =================
+def nettoyer_pour_audio(t):
+    t = re.sub(r"```.*?```", " (bloc de code) ", t, flags=re.DOTALL)
+    t = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", t)
+    return re.sub(r"[#*>`]", "", t)[:4500]
+
+@st.cache_data(ttl=86400 * 7, max_entries=200, show_spinner=False)
+def generer_audio_cached(empreinte, texte, voice_id):
+    if eleven_client is None: return None
+    try:
+        flux = eleven_client.text_to_speech.convert(
+            voice_id=voice_id, output_format="mp3_44100_128",
+            text=texte, model_id="eleven_multilingual_v2")
+        return b"".join(chunk for chunk in flux)
+    except Exception: return None
+
+def generer_audio(texte):
+    propre = nettoyer_pour_audio(texte)
+    empreinte = hashlib.md5((propre + VOICE_ID).encode()).hexdigest()
+    return generer_audio_cached(empreinte, propre, VOICE_ID)
+
 def stream_edith(box, candidats, api_messages):
-    """Essaie les modèles dans l'ordre. Retourne (texte, usage, modèle_utilisé, a_fallback)."""
     derniere_erreur = None
     for i, mdl in enumerate(candidats):
         try:
@@ -769,42 +707,36 @@ def stream_edith(box, candidats, api_messages):
                 max_tokens=st.session_state.max_tokens)
             acc = ""
             for chunk in stream:
-                if getattr(chunk, "usage", None):
-                    holder["usage"] = chunk.usage
+                if getattr(chunk, "usage", None): holder["usage"] = chunk.usage
                 if chunk.choices and chunk.choices[0].delta.content:
                     acc += chunk.choices[0].delta.content
                     box.markdown(acc + " ▌")
-            if not acc.strip():
-                raise RuntimeError("Réponse vide du modèle")
+            if not acc.strip(): raise RuntimeError("Réponse vide du modèle")
             return acc, holder["usage"], mdl, (i > 0)
-        except Exception as e:
-            derniere_erreur = e
+        except Exception as e: derniere_erreur = e
     raise derniere_erreur
 
-MOTS_REFUS = ["je ne peux pas vous aider avec", "i cannot assist", "i can't assist",
+MOTS_REFUS = ["je ne peux pas vous aider", "i cannot assist", "i can't assist",
               "i cannot help with", "against my guidelines", "against my programming"]
 def est_un_refus(texte):
     return any(m in texte.lower() for m in MOTS_REFUS)
 
 def bulle_user(texte):
-    st.markdown(f'<div class="msg-row user"><div class="msg-bubble">{html.escape(texte)}</div></div>',
-                unsafe_allow_html=True)
+    st.markdown(f'<div class="msg-row user"><div class="msg-bubble">{html.escape(texte)}</div></div>', unsafe_allow_html=True)
 
 def tete_edith():
-    st.markdown('<div class="msg-row edith"><div class="edith-avatar">⚡</div><div class="edith-nom">E.D.I.T.H.</div></div>',
-                unsafe_allow_html=True)
+    st.markdown('<div class="msg-row edith"><div class="edith-avatar">⚡</div><div class="edith-nom">E.D.I.T.H.</div></div>', unsafe_allow_html=True)
 
 def ligne_statut(meta):
     modele = html.escape(str(meta.get("model", "?")).replace(":online", ""))
     raison = html.escape(str(meta.get("reason", "")))
     ligne = f"<code>{modele}</code> · {raison}"
-    if meta.get("web"):
-        ligne += " · 🌐 web"
+    if meta.get("web"): ligne += " · 🌐 web"
     if st.session_state.get("show_debug", False) and PROFIL == "arthur":
         ligne += f" · in:{meta.get('tokens_in','?')} / out:{meta.get('tokens_out','?')} tok"
     st.markdown(f'<div class="statut">{ligne}</div>', unsafe_allow_html=True)
 
-# ================= 18. SIDEBAR =================
+# ================= 17. SIDEBAR =================
 with st.sidebar:
     st.markdown('<div class="brand-title">E.D.I.T.H.</div>', unsafe_allow_html=True)
     sous_titre = "ÉDITION PADRE" if PROFIL == "padre" else "EVEN DEAD I'M THE HERO"
@@ -838,45 +770,49 @@ with st.sidebar:
                            label_visibility="collapsed", key="mode_radio")
     selected_manual_model = None
     if mode_choisi == "🎛️ Manuel":
-        selected_manual_model = MODELS_PROFIL[st.selectbox(
-            "Choisir l'IA :", list(MODELS_PROFIL.keys()), label_visibility="collapsed")]
+        selected_manual_model = MODELS_PROFIL[st.selectbox("Choisir l'IA :", list(MODELS_PROFIL.keys()), label_visibility="collapsed")]
 
     if not st.session_state.incognito:
         st.markdown('<div class="side-label">Projet</div>', unsafe_allow_html=True)
         projets = liste_projets()
-        if st.session_state.get("widget_projet") not in projets:
-            st.session_state["widget_projet"] = "Général"
+        
+        # --- FIX STREAMLIT SELECTBOX ---
+        if st.session_state.get("projet_courant") not in projets:
+            st.session_state["projet_courant"] = "Général"
+            
+        index_projet = projets.index(st.session_state["projet_courant"])
+        
         col_proj, col_add = st.columns([0.78, 0.22])
         with col_proj:
-            projet_actif = st.selectbox("Projet actif", projets, key="widget_projet",
-                                        label_visibility="collapsed")
+            projet_selectionne = st.selectbox("Projet actif", projets, index=index_projet, label_visibility="collapsed")
+            if projet_selectionne != st.session_state["projet_courant"]:
+                st.session_state["projet_courant"] = projet_selectionne
+                st.rerun()
+                
         with col_add:
             with st.popover("➕"):
-                nom_projet = st.text_input("Nom du projet :", key="input_nouveau_projet",
-                                           placeholder="Voiture RC, Drone…")
+                nom_projet = st.text_input("Nom du projet :", key="input_nouveau_projet", placeholder="Voiture RC, Drone…")
                 if st.button("Créer le projet", use_container_width=True):
                     if nom_projet.strip():
                         ajouter_projet(nom_projet.strip())
-                        st.session_state["widget_projet"] = nom_projet.strip()
+                        st.session_state["projet_courant"] = nom_projet.strip()
                         st.rerun()
 
         st.markdown('<div class="side-label">Historique</div>', unsafe_allow_html=True)
-        search_query = st.text_input("🔍 Rechercher…", label_visibility="collapsed",
-                                     placeholder="🔍 Rechercher…").strip()
+        search_query = st.text_input("🔍 Rechercher…", label_visibility="collapsed", placeholder="🔍 Rechercher…").strip()
 
         for c_id in reversed(list(st.session_state.chats.keys())):
             data = st.session_state.chats[c_id]
-            if data.get("projet", "Général") != projet_actif:
-                continue
-            if not chat_matches_search(data, search_query):
-                continue
+            if data.get("projet", "Général") != st.session_state["projet_courant"]: continue
+            if not chat_matches_search(data, search_query): continue
+            
             is_active = (c_id == st.session_state.current_chat_id)
             label_titre = ("📌 " if is_active else "💭 ") + data["title"]
             col_title, col_menu = st.columns([0.84, 0.16])
             with col_title:
                 if st.button(label_titre, key=f"btn_chat_{c_id}", use_container_width=True):
                     st.session_state.current_chat_id = c_id
-                    st.session_state["widget_projet"] = data.get("projet", "Général")
+                    st.session_state["projet_courant"] = data.get("projet", "Général")
                     st.rerun()
             with col_menu:
                 with st.popover("⋮"):
@@ -884,24 +820,14 @@ with st.sidebar:
                     nouveau_titre = st.text_input("Titre :", value=data["title"], key=f"rename_input_{c_id}")
                     if st.button("✏️ Modifier le titre", key=f"rename_btn_{c_id}", use_container_width=True):
                         if nouveau_titre.strip():
-                            data["title"] = nouveau_titre.strip()
-                            data["titre_manuel"] = True
-                            sauvegarder_historique()
-                            st.rerun()
-                    st.download_button("⬇️ Exporter (.md)", data=exporter_markdown(data),
-                                       file_name=re.sub(r"[^\w\- ]", "", data["title"])[:30] + ".md",
-                                       mime="text/markdown", key=f"export_{c_id}", use_container_width=True)
+                            data["title"] = nouveau_titre.strip(); data["titre_manuel"] = True; sauvegarder_historique(); st.rerun()
+                    st.download_button("⬇️ Exporter (.md)", data=exporter_markdown(data), file_name=re.sub(r"[^\w\- ]", "", data["title"])[:30] + ".md", mime="text/markdown", key=f"export_{c_id}", use_container_width=True)
                     st.divider()
                     confirmation = st.checkbox("Confirmer la suppression", key=f"confirm_del_{c_id}")
-                    if st.button("🗑️ Supprimer chat & mémoires", key=f"del_chat_{c_id}",
-                                 use_container_width=True, disabled=not confirmation):
-                        supprimer_memoires_discussion(c_id)
-                        del st.session_state.chats[c_id]
-                        sauvegarder_historique()
-                        if not st.session_state.chats:
-                            create_new_chat()
-                        else:
-                            st.session_state.current_chat_id = next(reversed(st.session_state.chats))
+                    if st.button("🗑️ Supprimer chat & mémoires", key=f"del_chat_{c_id}", use_container_width=True, disabled=not confirmation):
+                        supprimer_memoires_discussion(c_id); del st.session_state.chats[c_id]; sauvegarder_historique()
+                        if not st.session_state.chats: create_new_chat()
+                        else: st.session_state.current_chat_id = next(reversed(st.session_state.chats))
                         st.rerun()
 
     # --- Rappels ---
@@ -913,72 +839,51 @@ with st.sidebar:
         r_msg = st.text_input("Message :", key="rappel_msg", placeholder="Appeler le garage…")
         if st.button("Ajouter le rappel", use_container_width=True):
             if r_msg.strip():
-                ajouter_rappel(r_date.isoformat(), r_heure, r_msg.strip())
-                st.toast("Rappel ajouté ⏰")
-                st.rerun()
-    rappels_a_venir = sorted([r for r in charger_rappels() if not r.get("fait")],
-                             key=lambda x: (x["date"], x.get("heure", "")))[:6]
+                ajouter_rappel(r_date.isoformat(), r_heure, r_msg.strip()); st.toast("Rappel ajouté ⏰"); st.rerun()
+    rappels_a_venir = sorted([r for r in charger_rappels() if not r.get("fait")], key=lambda x: (x["date"], x.get("heure", "")))[:6]
     for r in rappels_a_venir:
         en_retard = r["date"] <= date_iso()
         c_txt, c_del = st.columns([0.85, 0.15])
-        with c_txt:
-            st.caption(f"{'🔴' if en_retard else '⚪'} {r['date'][8:10]}/{r['date'][5:7]} "
-                       f"{r.get('heure','')} — {r['message'][:38]}")
+        with c_txt: st.caption(f"{'🔴' if en_retard else '⚪'} {r['date'][8:10]}/{r['date'][5:7]} {r.get('heure','')} — {r['message'][:38]}")
         with c_del:
-            if st.button("🗑️", key=f"del_rappel_{r['id']}"):
-                supprimer_rappel(r["id"])
-                st.rerun()
+            if st.button("🗑️", key=f"del_rappel_{r['id']}"): supprimer_rappel(r["id"]); st.rerun()
 
     # --- Mémoire ---
     st.markdown("---")
     if memoire_collection is not None:
         nb = memoire_collection.count()
-        st.markdown(f'<div class="mem-count">🧠 {nb} souvenir{"s" if nb > 1 else ""} dans la mémoire absolue</div>',
-                    unsafe_allow_html=True)
+        st.markdown(f'<div class="mem-count">🧠 {nb} souvenir{"s" if nb > 1 else ""} dans la mémoire absolue</div>', unsafe_allow_html=True)
         if PROFIL == "arthur":
             with st.expander("🛠️ Gérer la mémoire manuellement"):
                 with st.form("form_ajout_memoire", clear_on_submit=True):
-                    nouvelle_info = st.text_input("Ajouter un souvenir :",
-                                                  placeholder="ex: Arthur aime coder tard la nuit")
+                    nouvelle_info = st.text_input("Ajouter un souvenir :", placeholder="ex: Arthur aime coder tard la nuit")
                     if st.form_submit_button("➕ Ajouter", use_container_width=True):
                         if nouvelle_info.strip():
-                            fr, cree = sauvegarder_souvenir(nouvelle_info.strip(), manuel=True,
-                                                            projet=st.session_state.get("widget_projet", "Général"))
-                            st.toast(f"Souvenir ajouté le {fr} !" if cree else "Doublon ignoré.", icon="🧠")
-                            st.rerun()
+                            fr, cree = sauvegarder_souvenir(nouvelle_info.strip(), manuel=True, projet=st.session_state.get("projet_courant", "Général"))
+                            st.toast(f"Souvenir ajouté le {fr} !" if cree else "Doublon ignoré.", icon="🧠"); st.rerun()
                 st.markdown("**Derniers souvenirs :**")
                 tous = memoire_collection.get(limit=50)
                 if tous and tous.get("ids"):
                     for s_id, s_doc in zip(reversed(tous["ids"]), reversed(tous["documents"])):
                         c_text, c_del = st.columns([0.82, 0.18])
-                        with c_text:
-                            st.caption(s_doc)
+                        with c_text: st.caption(s_doc)
                         with c_del:
                             if st.session_state.get("confirm_mem") == s_id:
                                 if st.button("✅", key=f"cfm_mem_{s_id}"):
-                                    memoire_collection.delete(ids=[s_id])
-                                    st.session_state.pop("confirm_mem", None)
-                                    backup_memoire()
-                                    st.toast("Souvenir supprimé !", icon="🗑️")
-                                    st.rerun()
+                                    memoire_collection.delete(ids=[s_id]); st.session_state.pop("confirm_mem", None); backup_memoire(); st.toast("Souvenir supprimé !", icon="🗑️"); st.rerun()
                             else:
-                                if st.button("🗑️", key=f"del_mem_{s_id}"):
-                                    st.session_state.confirm_mem = s_id
-                                    st.rerun()
-                else:
-                    st.caption("Aucun souvenir dans la mémoire.")
+                                if st.button("🗑️", key=f"del_mem_{s_id}"): st.session_state.confirm_mem = s_id; st.rerun()
+                else: st.caption("Aucun souvenir dans la mémoire.")
 
     # --- Budget (Arthur uniquement) ---
     if PROFIL == "arthur":
         with st.expander("💶 Budget du mois"):
             dep = lire_json(FICHIER_DEPENSES, {})
-            m = dep.get(datetime.now().strftime("%Y-%m"),
-                        {"tokens_in": 0, "tokens_out": 0, "cout_usd": 0.0})
+            m = dep.get(datetime.now().strftime("%Y-%m"), {"tokens_in": 0, "tokens_out": 0, "cout_usd": 0.0})
             cout_eur = m["cout_usd"] * TAUX_USD_EUR
             st.caption(f"Tokens : {m['tokens_in']:,} entrée / {m['tokens_out']:,} sortie")
             st.caption(f"Coût estimé : **{cout_eur:.2f} €** (indicatif, prix OpenRouter live)")
-            if cout_eur > BUDGET_ALERTE:
-                st.warning(f"Seuil d'alerte dépassé ({BUDGET_ALERTE:.0f} €) !")
+            if cout_eur > BUDGET_ALERTE: st.warning(f"Seuil d'alerte dépassé ({BUDGET_ALERTE:.0f} €) !")
 
         with st.expander("⚙️ Atelier"):
             st.slider("Température", 0.0, 1.5, key="temperature", step=0.05)
@@ -998,21 +903,18 @@ with st.sidebar:
                             liste.append(f"{mod['id']} · ctx {mod.get('context_length','?')} · "
                                          f"${float(p.get('prompt') or 0)*1e6:.2f}/${float(p.get('completion') or 0)*1e6:.2f} par M")
                         st.session_state.modeles_or = sorted(liste)
-                    except Exception as e:
-                        st.error(f"Catalogue inaccessible : {e}")
+                    except Exception as e: st.error(f"Catalogue inaccessible : {e}")
             if st.session_state.get("modeles_or"):
                 filtre = st.text_input("Filtrer :", key="filtre_modeles", placeholder="claude, gpt, kimi…")
                 for ligne in st.session_state.modeles_or:
-                    if not filtre or filtre.lower() in ligne.lower():
-                        st.caption(ligne)
+                    if not filtre or filtre.lower() in ligne.lower(): st.caption(ligne)
 
     st.markdown("---")
     if st.button("🔒 Verrouiller E.D.I.T.H.", use_container_width=True):
-        for k in list(st.session_state.keys()):
-            del st.session_state[k]
+        for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
 
-# ================= 19. ZONE PRINCIPALE =================
+# ================= 18. ZONE PRINCIPALE =================
 chat = chat_courant()
 messages = chat["messages"]
 incognito = st.session_state.get("incognito", False)
@@ -1023,62 +925,39 @@ if not incognito:
     if dus:
         for r in dus:
             c_txt, c_ok = st.columns([0.88, 0.12])
-            with c_txt:
-                st.warning(f"⏰ **Rappel** : {r['message']} (prévu le {r['date'][8:10]}/{r['date'][5:7]} {r.get('heure','')})")
+            with c_txt: st.warning(f"⏰ **Rappel** : {r['message']} (prévu le {r['date'][8:10]}/{r['date'][5:7]} {r.get('heure','')})")
             with c_ok:
-                if st.button("✅ Fait", key=f"fait_{r['id']}"):
-                    marquer_rappel_fait(r["id"])
-                    st.rerun()
+                if st.button("✅ Fait", key=f"fait_{r['id']}"): marquer_rappel_fait(r["id"]); st.rerun()
 
 mode_label = "🤖 Routeur" if mode_choisi == "🤖 Automatique (Routeur)" else f"🎛️ {selected_manual_model.split('/')[-1]}"
 pills = f'<span class="pill">{html.escape(mode_label)}</span>'
-if chat.get("projet", "Général") != "Général" and not incognito:
-    pills += f'<span class="pill">📁 {html.escape(chat["projet"])}</span>'
-if st.session_state.web_actif:
-    pills += '<span class="pill">🌐 Web</span>'
-if incognito:
-    pills += '<span class="pill">🕶️ Incognito</span>'
+if chat.get("projet", "Général") != "Général" and not incognito: pills += f'<span class="pill">📁 {html.escape(chat["projet"])}</span>'
+if st.session_state.web_actif: pills += '<span class="pill">🌐 Web</span>'
+if incognito: pills += '<span class="pill">🕶️ Incognito</span>'
 pills += f'<span class="pill">📅 {date_complete()}</span>'
-st.markdown(f'<div class="topbar"><span class="chat-title">{html.escape(chat["title"])}</span>'
-            f'<span>{pills}</span></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="topbar"><span class="chat-title">{html.escape(chat["title"])}</span><span>{pills}</span></div>', unsafe_allow_html=True)
 st.divider()
 
 if not messages:
-    if incognito:
-        st.markdown("""
-        <div class="hero">
-          <div class="hero-orb">🕶️</div>
-          <h1>Session incognito.</h1>
-          <p>Rien ne sera conservé. Même moi, je ferai semblant d'oublier.</p>
-        </div>""", unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div class="hero">
-          <div class="hero-orb">⚡</div>
-          <h1>À votre service.</h1>
-        </div>""", unsafe_allow_html=True)
+    if incognito: st.markdown("""<div class="hero"><div class="hero-orb">🕶️</div><h1>Session incognito.</h1><p>Rien ne sera conservé. Même moi, je ferai semblant d'oublier.</p></div>""", unsafe_allow_html=True)
+    else: st.markdown("""<div class="hero"><div class="hero-orb">⚡</div><h1>À votre service.</h1></div>""", unsafe_allow_html=True)
 
 for idx, m in enumerate(messages):
     if m["role"] == "user":
         bulle_user(m["content"])
-        if "image_b64" in m:
-            st.image(base64.b64decode(m["image_b64"]), width=280)
-        if m.get("document_nom"):
-            st.caption(f"📎 {m['document_nom']}")
+        if "image_b64" in m: st.image(base64.b64decode(m["image_b64"]), width=280)
+        if m.get("document_nom"): st.caption(f"📎 {m['document_nom']}")
     else:
         tete_edith()
         st.markdown(m["content"])
-        if "metadata" in m:
-            ligne_statut(m["metadata"])
+        if "metadata" in m: ligne_statut(m["metadata"])
         col_audio, _ = st.columns([0.15, 0.85])
         with col_audio:
             with st.popover("🔊 Écouter"):
                 if st.button("▶️ Lire ce message", key=f"play_single_{idx}"):
                     audio_bytes = generer_audio(m["content"])
-                    if audio_bytes:
-                        st.audio(audio_bytes, format="audio/mp3", autoplay=True)
-                    else:
-                        st.error("Impossible de générer l'audio.")
+                    if audio_bytes: st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+                    else: st.error("Impossible de générer l'audio.")
 
 # Régénération multi-modèle (dernier message assistant)
 if messages and messages[-1]["role"] == "assistant" and messages[-1].get("content"):
@@ -1086,29 +965,22 @@ if messages and messages[-1]["role"] == "assistant" and messages[-1].get("conten
         options = ["🤖 Routeur"] + list(MODELS_PROFIL.keys())
         choix_regen = st.selectbox("Avec quel modèle ?", options, key="regen_choix")
         if st.button("🔁 Régénérer", use_container_width=True, key="btn_regen"):
-            messages.pop()
-            st.session_state.regen_demandee = True
+            messages.pop(); st.session_state.regen_demandee = True
             st.session_state.regen_model = None if choix_regen.startswith("🤖") else MODELS_PROFIL[choix_regen]
-            if not incognito:
-                sauvegarder_historique()
+            if not incognito: sauvegarder_historique()
             st.rerun()
 
-# ================= 20. ENTRÉES & TRAITEMENT =================
+# ================= 19. ENTRÉES & TRAITEMENT =================
 suffixe_up = f"{st.session_state.current_chat_id}_{st.session_state.upload_counter}"
 col_up1, col_up2, col_up3 = st.columns([1, 1, 1])
-with col_up1:
-    uploaded_image = st.file_uploader("🖼️ Image", type=["png", "jpg", "jpeg", "webp"],
-                                      key=f"uploader_img_{suffixe_up}")
-with col_up2:
-    audio_val = st.audio_input("🎤 Parler à E.D.I.T.H.")
+with col_up1: uploaded_image = st.file_uploader("🖼️ Image", type=["png", "jpg", "jpeg", "webp"], key=f"uploader_img_{suffixe_up}")
+with col_up2: audio_val = st.audio_input("🎤 Parler à E.D.I.T.H.")
 with col_up3:
     types_doc = ["txt", "md"] + (["pdf"] if PDF_DISPONIBLE else [])
-    uploaded_doc = st.file_uploader("📎 Document", type=types_doc, key=f"uploader_doc_{suffixe_up}",
-                                    help="PDF, TXT ou MD. Petit fichier : injecté directement. Gros : indexé pour recherche.")
+    uploaded_doc = st.file_uploader("📎 Document", type=types_doc, key=f"uploader_doc_{suffixe_up}", help="PDF, TXT ou MD. Petit fichier : injecté directement. Gros : indexé pour recherche.")
 
 prompt = st.chat_input("Demandez quoi que ce soit à E.D.I.T.H.…")
-if "pending_prompt" in st.session_state:
-    prompt = st.session_state.pop("pending_prompt")
+if "pending_prompt" in st.session_state: prompt = st.session_state.pop("pending_prompt")
 
 regen_actif = False
 if prompt is None and st.session_state.get("regen_demandee") and messages and messages[-1]["role"] == "user":
@@ -1120,16 +992,12 @@ if audio_val is not None:
         if openai_client:
             with st.spinner("Transcription en cours (Whisper)..."):
                 try:
-                    transcript = openai_client.audio.transcriptions.create(
-                        model="whisper-1", file=("audio.wav", audio_val))
+                    transcript = openai_client.audio.transcriptions.create(model="whisper-1", file=("audio.wav", audio_val))
                     prompt = transcript.text or prompt
-                except Exception as e:
-                    st.error(f"Erreur de transcription : {e}")
-        else:
-            st.error("Clé OpenAI manquante pour utiliser le micro.")
+                except Exception as e: st.error(f"Erreur de transcription : {e}")
+        else: st.error("Clé OpenAI manquante pour utiliser le micro.")
 
 if (prompt and prompt.strip()) or regen_actif:
-    # --- Construction du message utilisateur ---
     if regen_actif:
         user_msg = messages[-1]
         prompt_text = user_msg["content"]
@@ -1141,36 +1009,26 @@ if (prompt and prompt.strip()) or regen_actif:
             user_msg["image_mime"] = uploaded_image.type or "image/jpeg"
         if uploaded_doc:
             texte_doc = extraire_texte_fichier(uploaded_doc)
-            if texte_doc is None:
-                st.error("Lecture du document impossible (pypdf est-il installé ?).")
-            elif not texte_doc.strip():
-                st.warning("Document vide ou texte non extractible (PDF scanné ?).")
+            if texte_doc is None: st.error("Lecture du document impossible (pypdf est-il installé ?).")
+            elif not texte_doc.strip(): st.warning("Document vide ou texte non extractible (PDF scanné ?).")
             else:
                 user_msg["document_nom"] = uploaded_doc.name
-                if len(texte_doc) <= 12000:
-                    user_msg["document"] = texte_doc
+                if len(texte_doc) <= 12000: user_msg["document"] = texte_doc
                 else:
-                    nb_chunks = indexer_document(st.session_state.current_chat_id,
-                                                 uploaded_doc.name, texte_doc)
+                    nb_chunks = indexer_document(st.session_state.current_chat_id, uploaded_doc.name, texte_doc)
                     user_msg["document"] = (f"[Document « {uploaded_doc.name} » trop long pour injection directe : "
                                             f"{nb_chunks} extraits indexés, recherchez dedans via les questions.]"
                                             if nb_chunks else "[Échec d'indexation du document.]")
         messages.append(user_msg)
-        if not incognito:
-            sauvegarder_historique()
+        if not incognito: sauvegarder_historique()
         bulle_user(prompt_text)
-        if uploaded_image:
-            st.image(uploaded_image, width=280)
-        if user_msg.get("document_nom"):
-            st.caption(f"📎 {user_msg['document_nom']}")
+        if uploaded_image: st.image(uploaded_image, width=280)
+        if user_msg.get("document_nom"): st.caption(f"📎 {user_msg['document_nom']}")
 
-    # --- Titre automatique après le premier échange ---
     if not incognito and not regen_actif and not chat.get("titre_manuel"):
         nb_echanges = len([m for m in messages if m["role"] in ("user", "assistant")])
-        if chat["title"] == "Nouvelle discussion" and nb_echanges <= 1:
-            pass  # on attend la réponse pour générer le titre juste après
+        if chat["title"] == "Nouvelle discussion" and nb_echanges <= 1: pass
 
-    # --- Routage ---
     tete_edith()
     box = st.empty()
     with st.spinner("Analyse de la demande…"):
@@ -1186,12 +1044,10 @@ if (prompt and prompt.strip()) or regen_actif:
                 selected_model = MODEL_LIGHT
         else:
             contexte_routeur = " / ".join(str(m["content"])[:120] for m in messages[-3:-1]) if len(messages) > 1 else ""
-            selected_model, route_reason = get_smart_route(
-                prompt_text, user_msg.get("image_b64") is not None, contexte_routeur)
+            selected_model, route_reason = get_smart_route(prompt_text, user_msg.get("image_b64") is not None, contexte_routeur)
 
-    web = st.session_state.web_actif
-    def avec_online(m):
-        return m + ":online" if web else m
+    web = st.session_state.get("web_actif", False)
+    def avec_online(m): return m + ":online" if web else m
     candidats = [avec_online(selected_model)] + [avec_online(m) for m in FALLBACKS if m != selected_model]
 
     api_messages = construire_api_messages(chat, prompt_text)
@@ -1211,33 +1067,23 @@ if (prompt and prompt.strip()) or regen_actif:
             st.toast("Refus détecté — bascule sur Grok 4.3", icon="🛡️")
             route_reason += " ➔ reroutage post-refus"
             box.empty()
-            texte, usage, modele_utilise, _ = stream_edith(
-                box, [avec_online(MODEL_UNFILTERED)], api_messages)
+            texte, usage, modele_utilise, _ = stream_edith(box, [avec_online(MODEL_UNFILTERED)], api_messages)
 
-        if a_fallback:
-            route_reason += " (après secours)"
+        if a_fallback: route_reason += " (après secours)"
 
-        # --- Balises [SAVE:] et [RAPPEL:] ---
         texte_propre = texte
         saves = re.findall(r"\[SAVE:\s*(.*?)\]", texte, re.IGNORECASE)
         if saves:
-            if incognito:
-                st.toast("Mode incognito : souvenir non gravé.", icon="🕶️")
+            if incognito: st.toast("Mode incognito : souvenir non gravé.", icon="🕶️")
             elif memoire_collection is not None:
                 for info in saves:
-                    fr, cree = sauvegarder_souvenir(info.strip(),
-                                                    chat_id=st.session_state.current_chat_id,
-                                                    projet=chat.get("projet", "Général"))
-                    if cree:
-                        st.toast(f"Souvenir gravé le {fr} : {info.strip()}", icon="🧠")
+                    fr, cree = sauvegarder_souvenir(info.strip(), chat_id=st.session_state.current_chat_id, projet=chat.get("projet", "Général"))
+                    if cree: st.toast(f"Souvenir gravé le {fr} : {info.strip()}", icon="🧠")
             texte_propre = re.sub(r"\s*\[SAVE:\s*.*?\]", "", texte_propre, flags=re.IGNORECASE)
 
-        rappels_detectes = re.findall(
-            r"\[RAPPEL:\s*(\d{4}-\d{2}-\d{2})(?:\s+(\d{1,2}:\d{2}))?\s*\|\s*([^\]]+)\]",
-            texte_propre, re.IGNORECASE)
+        rappels_detectes = re.findall(r"\[RAPPEL:\s*(\d{4}-\d{2}-\d{2})(?:\s+(\d{1,2}:\d{2}))?\s*\|\s*([^\]]+)\]", texte_propre, re.IGNORECASE)
         if rappels_detectes:
-            if incognito:
-                st.toast("Mode incognito : rappel non enregistré.", icon="🕶️")
+            if incognito: st.toast("Mode incognito : rappel non enregistré.", icon="🕶️")
             else:
                 for d_r, h_r, msg_r in rappels_detectes:
                     ajouter_rappel(d_r, h_r or "", msg_r.strip())
@@ -1247,10 +1093,9 @@ if (prompt and prompt.strip()) or regen_actif:
         texte_propre = texte_propre.strip()
         box.markdown(texte_propre)
 
-        if st.session_state.mode_vocal_continu:
+        if st.session_state.get("mode_vocal_continu", False):
             audio_bytes = generer_audio(texte_propre)
-            if audio_bytes:
-                st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+            if audio_bytes: st.audio(audio_bytes, format="audio/mp3", autoplay=True)
 
         meta = {"model": modele_utilise, "reason": route_reason, "web": web,
                 "tokens_in": getattr(usage, "prompt_tokens", "?") if usage else "?",
@@ -1268,7 +1113,7 @@ if (prompt and prompt.strip()) or regen_actif:
 
         st.session_state.pop("regen_demandee", None)
         st.session_state.pop("regen_model", None)
-        st.session_state.upload_counter += 1  # vide les uploaders -> l'image ne se réattache plus
+        st.session_state.upload_counter += 1
         st.rerun()
 
     except Exception as e:
