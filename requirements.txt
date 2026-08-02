@@ -2,3 +2,5 @@ streamlit
 openai
 chromadb
 elevenlabs
+pypdf
+requests
