@@ -101,14 +101,26 @@ PRIX_DEFAUT = {
 }
 
 # ================= 3. TEMPS =================
+from zoneinfo import ZoneInfo
+
+# On force le fuseau horaire pour la Belgique/France
+FUSEAU = ZoneInfo("Europe/Brussels")
+
 JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 MOIS  = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+
 def date_complete():
-    n = datetime.now()
+    n = datetime.now(FUSEAU)
     return f"{JOURS[n.weekday()]} {n.day} {MOIS[n.month - 1]} {n.year}"
-def heure_actuelle(): return datetime.now().strftime("%H:%M")
-def date_fr_courte(): return datetime.now().strftime("%d/%m/%Y")
-def date_iso(): return datetime.now().strftime("%Y-%m-%d")
+
+def heure_actuelle(): 
+    return datetime.now(FUSEAU).strftime("%H:%M")
+
+def date_fr_courte(): 
+    return datetime.now(FUSEAU).strftime("%d/%m/%Y")
+
+def date_iso(): 
+    return datetime.now(FUSEAU).strftime("%Y-%m-%d")
 
 # ================= 4. THÈME & UI =================
 st.set_page_config(page_title="E.D.I.T.H.", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
