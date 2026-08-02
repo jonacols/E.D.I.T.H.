@@ -887,7 +887,7 @@ with st.sidebar:
 
         with st.expander("⚙️ Atelier"):
             st.slider("Température", 0.0, 1.5, key="temperature", step=0.05)
-            st.slider("Longueur max (tokens)", 256, 8192, key="max_tokens", step=256)
+            st.slider("Longueur max (tokens)", 256, 16384, key="max_tokens", step=256)
 
         st.toggle("Debug sous le capot", key="show_debug")
         with st.expander("🛠️ Reroutage & Modèles"):
