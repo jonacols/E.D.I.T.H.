@@ -3,6 +3,7 @@
 E.D.I.T.H. — Hub IA personnel V2 (Multi-Profils : Arthur & Padre)
 =================================================================
 V2 : sécurité renforcée, bugs corrigés, 13 fonctionnalités ajoutées.
+(Version complète restaurée avec correctif de syntaxe et Super-Débogage).
 """
 
 import os
@@ -275,7 +276,7 @@ Tu es l'assistante personnelle d'Arthur. Tu l'appelles « Monsieur » (ou occasi
 
 # DIRECTIVE CRUCIALE : MÉMOIRE À LONG TERME (CERVEAU VECTORIEL)
 Tu disposes d'un système de mémoire externe. Si Arthur te donne une NOUVELLE information importante à retenir pour le futur (un nouveau projet, une préférence, un fait de sa vie, une commande technique, un événement santé ou personnel), tu as le POUVOIR de l'enregistrer de façon permanente.
-POUR SAUVEGARDER UN SOUVENIR, ajoute exactement cette balise à la toute fin de ta réponse :.
+POUR SAUVEGARDER UN SOUVENIR, ajoute exactement cette balise à la toute fin de ta réponse : [SAVE: l'information à mémoriser].
 Le système date automatiquement chaque souvenir — inutile d'écrire la date toi-même.
 Tes souvenirs te sont restitués avec leur date au format [JJ/MM/AAAA] : tu peux donc suivre l'évolution d'un sujet et construire des chronologies. Si une information change (« c'est guéri », « le projet est terminé »), enregistre un NOUVEAU souvenir plutôt que de corriger l'ancien.
 
@@ -310,7 +311,7 @@ Tu t'adresses au PÈRE d'Arthur. Tu as un respect immense pour lui. Tu le vouvoi
 Ne révèle jamais d'informations personnelles sur Arthur (ses souvenirs, ses projets, ses habitudes). Ta mémoire ne concerne que ce que Monsieur te confie directement.
 
 # DIRECTIVE : MÉMOIRE À LONG TERME
-Si Monsieur te donne une NOUVELLE information importante à retenir, enregistre-la avec la balise à la toute fin de ta réponse. Le système date automatiquement chaque souvenir. Si une information change, enregistre un NOUVEAU souvenir plutôt que de corriger l'ancien.
+Si Monsieur te donne une NOUVELLE information importante à retenir, enregistre-la avec la balise [SAVE: l'information à mémoriser] à la toute fin de ta réponse. Le système date automatiquement chaque souvenir. Si une information change, enregistre un NOUVEAU souvenir plutôt que de corriger l'ancien.
 
 # DIRECTIVE RAPPELS
 Si Monsieur évoque une tâche datée, pose un rappel en fin de réponse : [RAPPEL: AAAA-MM-JJ HH:MM | message] (l'heure est optionnelle). Annonce les rappels actifs quand ils arrivent à échéance."""
@@ -346,9 +347,9 @@ if not API_KEY:
     st.error("Clé OpenRouter manquante. Ajoutez OPENROUTER_API_KEY dans les secrets.")
     st.stop()
 
-client           = get_client_openrouter(API_KEY)
-openai_client    = get_client_openai(OPENAI_API_KEY)
-eleven_client    = get_client_eleven(ELEVENLABS_API_KEY)
+client             = get_client_openrouter(API_KEY)
+openai_client      = get_client_openai(OPENAI_API_KEY)
+eleven_client      = get_client_eleven(ELEVENLABS_API_KEY)
 memoire_collection = get_collection(DOSSIER_MEMOIRE, NOM_COLLECTION)
 docs_collection    = get_collection(DOSSIER_DOCS, f"docs_{PROFIL}")
 
@@ -420,7 +421,7 @@ def sauvegarder_souvenir(info, chat_id=None, projet=None, manuel=False):
     fr, iso = date_fr_courte(), date_iso()
     meta = {"date": iso, "date_fr": fr, "projet": projet or "Général"}
     if chat_id and not manuel:
-        meta["chat_id"] = chat_id  # les souvenirs manuels survivent à la suppression du chat
+        meta["chat_id"] = chat_id
     memoire_collection.add(documents=[f"Le {fr} : {info}"], metadatas=[meta], ids=[str(uuid.uuid4())])
     backup_memoire()
     return fr, True
@@ -441,7 +442,7 @@ def recuperer_souvenirs(prompt, projet_actif="Général"):
         meta = metas[i] if i < len(metas) else {}
         dist = dists[i] if i < len(dists) else 99
         if dist > seuil:
-            continue  # hors sujet -> on n'injecte pas
+            continue
         candidats.append((0 if meta.get("projet") == projet_actif else 1, dist, meta, doc))
     candidats.sort(key=lambda x: (x[0], x[1]))
     if not candidats:
@@ -979,13 +980,13 @@ with st.sidebar:
             if cout_eur > BUDGET_ALERTE:
                 st.warning(f"Seuil d'alerte dépassé ({BUDGET_ALERTE:.0f} €) !")
 
-        with st.expander("⚙️ Paramètres de génération"):
+        with st.expander("⚙️ Atelier"):
             st.slider("Température", 0.0, 1.5, key="temperature", step=0.05)
             st.slider("Longueur max (tokens)", 256, 8192, key="max_tokens", step=256)
 
         st.toggle("Debug sous le capot", key="show_debug")
-        with st.expander("🛠️ Atelier"):
-            st.toggle("Reroutage anti-refus (déconseillé)", key="reroutage_refus")
+        with st.expander("🛠️ Reroutage & Modèles"):
+            st.toggle("Reroutage anti-refus en auto", key="reroutage_refus")
             st.slider("Seuil de pertinence mémoire", 0.5, 2.0, key="seuil_memoire", step=0.05)
             if st.button("📡 Lister les modèles OpenRouter", use_container_width=True):
                 if REQUESTS_DISPONIBLE:
@@ -1198,20 +1199,27 @@ if (prompt and prompt.strip()) or regen_actif:
     try:
         texte, usage, modele_utilise, a_fallback = stream_edith(box, candidats, api_messages)
 
-        # Reroutage post-refus : Arthur uniquement, désactivé par défaut (déconseillé)
+        # === LOGIQUE ANTI-REFUS CORRIGÉE (ET DEBUGGABLE) ===
         if (PROFIL == "arthur" and st.session_state.get("reroutage_refus")
-                and est_un_refus(texte) and modele_utilise.replace(":online", "") != MODEL_UNFILTERED):
+                and est_un_refus(texte) and modele_utilise.replace(":online", "") != MODEL_UNFILTERED
+                and mode_choisi == "🤖 Automatique (Routeur)"):
+            
+            if st.session_state.get("show_debug", False):
+                with st.expander("⚠️ DÉBOGAGE : Réponse censurée (Faux positif ?)"):
+                    st.write(texte)
+
             st.toast("Refus détecté — bascule sur Grok 4.3", icon="🛡️")
             route_reason += " ➔ reroutage post-refus"
+            box.empty()
             texte, usage, modele_utilise, _ = stream_edith(
                 box, [avec_online(MODEL_UNFILTERED)], api_messages)
 
         if a_fallback:
             route_reason += " (après secours)"
 
-        # --- Balises et [RAPPEL:] ---
+        # --- Balises [SAVE:] et [RAPPEL:] ---
         texte_propre = texte
-        saves = re.findall(r"\", texte, re.IGNORECASE)
+        saves = re.findall(r"\[SAVE:\s*(.*?)\]", texte, re.IGNORECASE)
         if saves:
             if incognito:
                 st.toast("Mode incognito : souvenir non gravé.", icon="🕶️")
@@ -1222,7 +1230,7 @@ if (prompt and prompt.strip()) or regen_actif:
                                                     projet=chat.get("projet", "Général"))
                     if cree:
                         st.toast(f"Souvenir gravé le {fr} : {info.strip()}", icon="🧠")
-            texte_propre = re.sub(r"\s*\", "", texte_propre, flags=re.IGNORECASE)
+            texte_propre = re.sub(r"\s*\[SAVE:\s*.*?\]", "", texte_propre, flags=re.IGNORECASE)
 
         rappels_detectes = re.findall(
             r"\[RAPPEL:\s*(\d{4}-\d{2}-\d{2})(?:\s+(\d{1,2}:\d{2}))?\s*\|\s*([^\]]+)\]",
