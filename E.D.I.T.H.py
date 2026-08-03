@@ -1284,21 +1284,39 @@ if (prompt and prompt.strip()) or regen_actif:
    api_messages = construire_api_messages(chat, prompt_text)
 
    try:
-       texte, usage, modele_utilise, a_fallback = stream_edith(box, candidats, api_messages)
+       # NOUVELLE PARTIE : On bypass complétement l'IA si la commande spéciale [DUMP_MEMORY] est incluse
+       if "[DUMP_MEMORY]" in prompt_text:
+           if memoire_collection is None or memoire_collection.count() == 0:
+               texte = "Ma mémoire vectorielle est actuellement vide."
+           else:
+               tous = memoire_collection.get()
+               lignes = []
+               for m, d in zip(tous.get("metadatas", []), tous.get("documents", [])):
+                   date_s = m.get("date_fr", "?")
+                   lignes.append(f"- [{date_s}] {d}")
+               texte = "🧠 **DUMP COMPLET DE LA MÉMOIRE :**\n\n" + "\n".join(lignes)
+           
+           usage = None
+           modele_utilise = "Système (Interne)"
+           route_reason = "Commande secrète [DUMP_MEMORY]"
+           a_fallback = False
+       else:
+           # Comportement normal si la balise n'y est pas
+           texte, usage, modele_utilise, a_fallback = stream_edith(box, candidats, api_messages)
 
-       # === LOGIQUE ANTI-REFUS (reroutage optionnel, debuggable) ===
-       if (PROFIL == "arthur" and st.session_state.get("reroutage_refus")
-               and est_un_refus(texte) and modele_utilise.replace(":online", "") != MODEL_UNFILTERED
-               and mode_choisi == "🤖 Automatique (Routeur)"):
+           # === LOGIQUE ANTI-REFUS (reroutage optionnel, debuggable) ===
+           if (PROFIL == "arthur" and st.session_state.get("reroutage_refus")
+                   and est_un_refus(texte) and modele_utilise.replace(":online", "") != MODEL_UNFILTERED
+                   and mode_choisi == "🤖 Automatique (Routeur)"):
 
-           if st.session_state.get("show_debug", False):
-               with st.expander("⚠️ DÉBOGAGE : Réponse censurée (Faux positif ?)"):
-                   st.write(texte)
+               if st.session_state.get("show_debug", False):
+                   with st.expander("⚠️ DÉBOGAGE : Réponse censurée (Faux positif ?)"):
+                       st.write(texte)
 
-           st.toast("Refus détecté — bascule sur Grok 4.3", icon="🛡️")
-           route_reason += " ➔ reroutage post-refus"
-           box.empty()
-           texte, usage, modele_utilise, _ = stream_edith(box, [avec_online(MODEL_UNFILTERED)], api_messages)
+               st.toast("Refus détecté — bascule sur Grok 4.3", icon="🛡️")
+               route_reason += " ➔ reroutage post-refus"
+               box.empty()
+               texte, usage, modele_utilise, _ = stream_edith(box, [avec_online(MODEL_UNFILTERED)], api_messages)
 
        if a_fallback: route_reason += " (après secours)"
 
@@ -1319,7 +1337,7 @@ if (prompt and prompt.strip()) or regen_actif:
                for d_r, h_r, msg_r in rappels_detectes:
                    ajouter_rappel(d_r, h_r or "", msg_r.strip())
                    st.toast(f"Rappel posé pour le {d_r} {h_r or ''} : {msg_r.strip()}", icon="⏰")
-           texte_propre = re.sub(r"\s*\[RAPPEL:[^\]]*\]", "", texte_propre, flags=re.IGNORECASE)
+               texte_propre = re.sub(r"\s*\[RAPPEL:[^\]]*\]", "", texte_propre, flags=re.IGNORECASE)
 
        texte_propre = texte_propre.strip()
        box.markdown(texte_propre)
