@@ -417,7 +417,7 @@ def sauvegarder_souvenir(info, chat_id=None, projet=None, manuel=False):
     try:
         res = memoire_collection.query(query_texts=[info], n_results=1)
         dists = res.get("distances", [[]])[0]
-        if dists and dists[0] < SEUIL_DOUBLON: return date_fr_courte(), False
+        if dists and len(dists) > 0 and dists[0] < SEUIL_DOUBLON: return date_fr_courte(), False
     except Exception: pass
     fr, iso = date_fr_courte(), date_iso()
     meta = {"date": iso, "date_fr": fr, "projet": projet or "Général"}
@@ -429,21 +429,37 @@ def sauvegarder_souvenir(info, chat_id=None, projet=None, manuel=False):
 def recuperer_souvenirs(prompt, projet_actif="Général"):
     if memoire_collection is None or memoire_collection.count() == 0: return ""
     seuil = st.session_state.get("seuil_memoire", SEUIL_PERTINENCE_DEFAUT)
-    try: res = memoire_collection.query(query_texts=[prompt], n_results=6)
-    except Exception: return ""
+    try: 
+        res = memoire_collection.query(query_texts=[prompt], n_results=15)
+    except Exception: 
+        return ""
+    
     docs  = res.get("documents", [[]])[0]
     metas = res.get("metadatas", [[]])[0]
     dists = res.get("distances", [[]])[0]
+    
     candidats = []
     for i, doc in enumerate(docs):
         meta = metas[i] if i < len(metas) else {}
         dist = dists[i] if i < len(dists) else 99
+        
         if dist > seuil: continue
-        candidats.append((0 if meta.get("projet") == projet_actif else 1, dist, meta, doc))
-    candidats.sort(key=lambda x: (x[0], x[1]))
+        
+        score_final = dist
+        projet_souvenir = meta.get("projet", "Général")
+        
+        # Pénalité légère si le souvenir provient d'un autre projet spécifique
+        if projet_souvenir != projet_actif and projet_souvenir != "Général":
+            score_final += 0.20
+            
+        candidats.append((score_final, meta, doc))
+        
+    candidats.sort(key=lambda x: x[0])
+    
     if not candidats: return ""
-    lignes = [f"- [{c[2].get('date_fr', '?')}] {c[3]}" for c in candidats[:4]]
+    lignes = [f"- [{c[1].get('date_fr', '?')}] {c[2]}" for c in candidats[:5]]
     return ("\n\n# SOUVENIRS DATÉS (mémoire vectorielle) :\nUtilise-les s'ils sont pertinents.\n" + "\n".join(lignes))
+
 
 def supprimer_memoires_discussion(chat_id):
     for col in (memoire_collection, docs_collection):
@@ -644,8 +660,17 @@ def obtenir_resume(chat):
 def construire_api_messages(chat, prompt_courant):
     sys_content = system_prompt_du_jour(chat)
     if not st.session_state.get("incognito"):
-        sys_content += recuperer_souvenirs(prompt_courant, chat.get("projet", "Général"))
+        
+        # Contexte plus large pour améliorer le RAG : on prend les 3 derniers messages
+        contexte_recherche = prompt_courant
+        messages_recents = [m["content"] for m in chat["messages"] if m["role"] in ("user", "assistant")][-3:]
+        if messages_recents:
+            contexte_recherche = " | ".join(str(m) for m in messages_recents)
+            contexte_recherche = contexte_recherche[-600:]
+            
+        sys_content += recuperer_souvenirs(contexte_recherche, chat.get("projet", "Général"))
         sys_content += extraits_pertinents(st.session_state.current_chat_id, prompt_courant)
+        
     api = [{"role": "system", "content": sys_content}]
     resume = obtenir_resume(chat)
     if resume:
