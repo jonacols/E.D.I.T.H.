@@ -1,6 +1,8 @@
 streamlit
 openai
 chromadb
+sentence-transformers
 elevenlabs
 pypdf
 requests
+tzdata
