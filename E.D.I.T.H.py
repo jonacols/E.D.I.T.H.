@@ -59,8 +59,8 @@ DOSSIER_COURANT = os.path.dirname(os.path.abspath(__file__))
 FICHIER_SECURITE = os.path.join(DOSSIER_COURANT, ".securite_edith.json")
 
 MAX_CONTEXT_MESSAGES = 30
-SEUIL_PERTINENCE_DEFAUT = 1.25
-SEUIL_DOUBLON = 0.12
+SEUIL_PERTINENCE_DEFAUT = 1.35
+SEUIL_DOUBLON = 0.04
 
 # ================= 2. MODÈLES =================
 MODELS_MANUAL = {
